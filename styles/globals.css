@@ -1,0 +1,140 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --imperial-purple: 274 91% 47%;
+  --background: 230 56% 97%;
+  --foreground: 235 20% 16%;
+  --card: 0 0% 100%;
+  --card-foreground: 235 20% 16%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 235 20% 16%;
+  --primary: 274 91% 47%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 323 64% 82%;
+  --secondary-foreground: 276 22% 18%;
+  --muted: 212 38% 92%;
+  --muted-foreground: 215 18% 40%;
+  --accent: 189 76% 59%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 352 79% 62%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 221 30% 88%;
+  --input: 216 33% 97%;
+  --ring: 274 94% 64%;
+  --chart-1: 286 87% 63%;
+  --chart-2: 190 72% 52%;
+  --chart-3: 47 90% 60%;
+  --chart-4: 330 64% 67%;
+  --chart-5: 165 82% 55%;
+  --radius: 0.75rem;
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 235 20% 16%;
+  --sidebar-primary: 274 91% 47%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 310 50% 94%;
+  --sidebar-accent-foreground: 235 20% 16%;
+  --sidebar-border: 219 22% 86%;
+  --sidebar-ring: 295 89% 58%;
+}
+
+.dark {
+  --imperial-purple: 280 100% 73%;
+  --background: 243 28% 10%;
+  --foreground: 0 0% 96%;
+  --card: 240 10% 15%;
+  --card-foreground: 0 0% 96%;
+  --popover: 240 10% 16%;
+  --popover-foreground: 0 0% 96%;
+  --primary: 280 90% 67%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 282 78% 57%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 226 20% 17%;
+  --muted-foreground: 210 20% 74%;
+  --accent: 189 80% 55%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 354 86% 64%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 237 16% 18%;
+  --input: 235 15% 17%;
+  --ring: 284 92% 61%;
+  --chart-1: 280 80% 58%;
+  --chart-2: 176 70% 44%;
+  --chart-3: 40 90% 56%;
+  --chart-4: 300 70% 60%;
+  --chart-5: 170 80% 50%;
+  --sidebar-background: 238 14% 12%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-primary: 280 90% 67%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 240 18% 18%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-border: 238 14% 14%;
+  --sidebar-ring: 284 92% 61%;
+}
+
+@theme inline {
+  /* optional: --font-sans, --font-serif, --font-mono if they are applied in the layout.tsx */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at top left, hsla(286, 100%, 80%, 0.15), transparent 24%),
+      radial-gradient(circle at bottom right, hsla(190, 100%, 70%, 0.14), transparent 22%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: hsla(var(--primary) / 0.25);
+    color: var(--primary-foreground);
+  }
+}
