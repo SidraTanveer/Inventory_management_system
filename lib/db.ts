@@ -2,21 +2,27 @@ import { Pool } from "pg"
 
 const connectionString = process.env.NEON_POSTGRES_URL || process.env.DATABASE_URL
 
-if (!connectionString) {
-  throw new Error(
-    "Missing database connection string. Set NEON_POSTGRES_URL or DATABASE_URL in your environment.",
-  )
+// Only throw error at runtime, not at build time
+let pool: Pool | null = null
+
+function getPool() {
+  if (!pool && connectionString) {
+    pool = new Pool({
+      connectionString,
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    })
+  }
+  if (!pool) {
+    throw new Error("Missing database connection string. Set DATABASE_URL in your environment.")
+  }
+  return pool
 }
 
-export const pool = new Pool({
-  connectionString,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-})
-
 export async function query<T = any>(text: string, params?: any[]) {
-  const client = await pool.connect()
+  const currentPool = getPool()
+  const client = await currentPool.connect()
   try {
     const result = await client.query(text, params)
     return result as { rows: T[] }
