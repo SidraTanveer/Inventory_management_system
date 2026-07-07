@@ -159,7 +159,7 @@ export async function generateDailyOrdersPDF(invoices: Invoice[], selectedDate: 
     })
     doc.save(`daily-orders-${dateStr.replace(/\s/g, "-")}.pdf`)
 
-    return true
+    return doc
   } catch (error) {
     console.error("Error generating daily orders PDF:", error)
     throw error

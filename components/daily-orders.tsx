@@ -12,6 +12,7 @@ import { Search, Calendar, Download, Eye, Edit, Trash2, Plus, CheckCircle } from
 import { InvoiceCreateDialog } from "@/components/invoice-create-dialog"
 import { generateDailyOrdersPDF } from "@/components/daily-orders-pdf-generator"
 import { exportDailyOrdersToExcel } from "@/lib/excel-utils"
+import { savePDFToDatabase } from "@/lib/pdf-utils"
 import { useToast } from "@/hooks/use-toast"
 
 // Helper ⚡
@@ -155,7 +156,19 @@ export function DailyOrders({
 
     setIsDownloadingAll(true)
     try {
-      await generateDailyOrdersPDF(filteredInvoices, selectedDate, currentAppCurrency)
+      const doc = await generateDailyOrdersPDF(filteredInvoices, selectedDate, currentAppCurrency)
+
+      // Save to database
+      const dateStr = new Date(selectedDate).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+      await savePDFToDatabase(doc, {
+        filename: `daily-orders-${dateStr.replace(/\s/g, "-")}.pdf`,
+        type: "daily_orders",
+      })
+
       toast({
         title: "PDF Downloaded Successfully",
         description: `Daily orders report for ${selectedDate} has been downloaded.`,

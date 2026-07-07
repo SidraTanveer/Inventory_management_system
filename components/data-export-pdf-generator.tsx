@@ -141,7 +141,7 @@ export async function generateCustomersPDF(customers: Customer[], invoices: Invo
   doc.setTextColor(100, 100, 100)
   doc.text("Glow With Vibes - Customer Database Report", pageWidth / 2, pageHeight - 10, { align: "center" })
 
-  doc.save(`customers-detailed-${new Date().toISOString().split("T")[0]}.pdf`)
+  return doc
 }
 
 export async function generateVendorsPDF(vendors: Vendor[], products: Product[], currency: string) {
@@ -269,7 +269,7 @@ export async function generateVendorsPDF(vendors: Vendor[], products: Product[],
   doc.setTextColor(100, 100, 100)
   doc.text("Glow With Vibes - Vendor Database Report", pageWidth / 2, pageHeight - 10, { align: "center" })
 
-  doc.save(`vendors-detailed-${new Date().toISOString().split("T")[0]}.pdf`)
+  return doc
 }
 
 export async function generateInvoicesSummaryPDF(invoices: Invoice[], currency: string) {
@@ -386,5 +386,5 @@ export async function generateInvoicesSummaryPDF(invoices: Invoice[], currency: 
   doc.setTextColor(100, 100, 100)
   doc.text("Glow With Vibes - Invoices Summary Report", pageWidth / 2, pageHeight - 10, { align: "center" })
 
-  doc.save(`invoices-detailed-${new Date().toISOString().split("T")[0]}.pdf`)
+  return doc
 }

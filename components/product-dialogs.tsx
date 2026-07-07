@@ -23,6 +23,7 @@ import { generateProductPDF, generateAllProductsPDF } from "@/components/product
 import { exportProductsToExcel, importProductsFromExcel } from "@/lib/excel-utils"
 import type { Product, PurchaseHistoryItem } from "@/types/app"
 import { formatCurrency, generateId, formatDate } from "@/lib/utils"
+import { savePDFToDatabase } from "@/lib/pdf-utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 // Define Vendor type here for use in ProductDialogs
@@ -83,6 +84,14 @@ export function ProductDialogs({
       const vendor = vendors.find((v) => v.id === product.vendorId)
       const doc = await generateProductPDF(product, vendor, currentAppCurrency)
       doc.save(`product-${product.sku}-${product.name.replace(/\s/g, "_")}.pdf`)
+
+      // Save to database
+      await savePDFToDatabase(doc, {
+        filename: `product-${product.sku}-${product.name.replace(/\s/g, "_")}.pdf`,
+        type: "product",
+        entity_id: product.id,
+        entity_type: "product",
+      })
     } catch (error) {
       console.error("Error generating product PDF:", error)
     } finally {
@@ -95,6 +104,12 @@ export function ProductDialogs({
       setIsDownloadingPdf(true)
       const doc = await generateAllProductsPDF(products, vendors, currentAppCurrency)
       doc.save(`all-products-inventory-${new Date().toISOString().split("T")[0]}.pdf`)
+
+      // Save to database
+      await savePDFToDatabase(doc, {
+        filename: `all-products-inventory-${new Date().toISOString().split("T")[0]}.pdf`,
+        type: "products_export",
+      })
     } catch (error) {
       console.error("Error generating all products PDF:", error)
     } finally {

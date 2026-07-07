@@ -62,6 +62,7 @@ import {
   getCurrentDateTime,
   getDaysSince,
 } from "@/lib/utils"
+import { savePDFToDatabase } from "@/lib/pdf-utils"
 
 const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36)
 
@@ -578,6 +579,78 @@ function DashboardPageContent() {
   }, [trashItems])
 
   useEffect(() => {
+    const loadDataFromServer = async () => {
+      try {
+        // Load products
+        const prodRes = await fetch('/api/products')
+        if (prodRes.ok) {
+          const prodData = await prodRes.json()
+          if (Array.isArray(prodData)) setProducts(prodData)
+        }
+      } catch (error) {
+        console.warn('Unable to load products from server:', error)
+      }
+
+      try {
+        // Load invoices
+        const invRes = await fetch('/api/invoices')
+        if (invRes.ok) {
+          const invData = await invRes.json()
+          if (Array.isArray(invData)) setInvoices(invData)
+        }
+      } catch (error) {
+        console.warn('Unable to load invoices from server:', error)
+      }
+
+      try {
+        // Load customers
+        const custRes = await fetch('/api/customers')
+        if (custRes.ok) {
+          const custData = await custRes.json()
+          if (Array.isArray(custData)) setCustomers(custData)
+        }
+      } catch (error) {
+        console.warn('Unable to load customers from server:', error)
+      }
+
+      try {
+        // Load vendors
+        const vendRes = await fetch('/api/vendors')
+        if (vendRes.ok) {
+          const vendData = await vendRes.json()
+          if (Array.isArray(vendData)) setVendors(vendData)
+        }
+      } catch (error) {
+        console.warn('Unable to load vendors from server:', error)
+      }
+
+      try {
+        // Load deals
+        const dealRes = await fetch('/api/deals')
+        if (dealRes.ok) {
+          const dealData = await dealRes.json()
+          if (Array.isArray(dealData)) setDeals(dealData)
+        }
+      } catch (error) {
+        console.warn('Unable to load deals from server:', error)
+      }
+
+      try {
+        // Load trash
+        const trashRes = await fetch('/api/trash')
+        if (trashRes.ok) {
+          const trashData = await trashRes.json()
+          if (Array.isArray(trashData)) setTrashItems(trashData)
+        }
+      } catch (error) {
+        console.warn('Unable to load trash from server:', error)
+      }
+    }
+
+    loadDataFromServer()
+  }, [])
+
+  useEffect(() => {
     if (Array.isArray(users)) {
       saveToLocalStorage("ims_users", users)
     }
@@ -690,12 +763,24 @@ function DashboardPageContent() {
     } else if (type === "customer") {
       setCustomers((prev) => prev.filter((c) => c.id !== item.id))
     }
-    toast({ title: "Moved to Trash", description: `${(item as any).name || item.id} moved to trash.` })
+    toast({ title: 'Moved to Trash', description: `${(item as any).name || item.id} moved to trash.` })
   }
 
   const handleRecoverItem = (trashItemId: string) => {
     const itemToRecover = trashItems.find((t) => t.id === trashItemId)
     if (!itemToRecover) return
+
+    const restore = async () => {
+      try {
+        await fetch('/api/trash', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: trashItemId }),
+        })
+      } catch (error) {
+        console.warn('Failed to restore trash item on server', error)
+      }
+    }
 
     if (itemToRecover.type === "product") {
       setProducts((prev) => [...prev, itemToRecover.data as Product])
@@ -710,25 +795,50 @@ function DashboardPageContent() {
     }
 
     setTrashItems((prev) => prev.filter((t) => t.id !== trashItemId))
+    restore()
     toast({
-      title: "Item Recovered",
+      title: 'Item Recovered',
       description: `${(itemToRecover.data as any).name || itemToRecover.originalId} recovered.`,
     })
   }
 
   const handleEmptyTrash = (itemIds?: string[]) => {
+    const removeTrash = async () => {
+      try {
+        const qs = itemIds?.map((id) => `id=${encodeURIComponent(id)}`).join('&')
+        await fetch(`/api/trash${qs ? `?${qs}` : ''}`, { method: 'DELETE' })
+      } catch (error) {
+        console.warn('Failed to permanently delete trash items on server', error)
+      }
+    }
+
     if (itemIds) {
       setTrashItems((prev) => prev.filter((item) => !itemIds.includes(item.id)))
-      toast({ title: "Items Permanently Deleted", description: `${itemIds.length} items permanently deleted.` })
+      removeTrash()
+      toast({ title: 'Items Permanently Deleted', description: `${itemIds.length} items permanently deleted.` })
     } else {
       setTrashItems([])
-      toast({ title: "Trash Emptied", description: "All items in trash have been permanently deleted." })
+      removeTrash()
+      toast({ title: 'Trash Emptied', description: 'All items in trash have been permanently deleted.' })
     }
   }
 
   const handleAddProduct = (newProduct: Product) => {
-    const updatedProducts = [...products, newProduct]
-    setProducts(updatedProducts)
+    const create = async () => {
+      try {
+        const res = await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newProduct) })
+        const json = await res.json()
+        if (json.success && json.product) {
+          setProducts((prev) => [json.product, ...prev])
+        } else {
+          // fallback to local
+          setProducts((prev) => [newProduct, ...prev])
+        }
+      } catch (e) {
+        setProducts((prev) => [newProduct, ...prev])
+      }
+    }
+    create()
     toast({
       title: "Product Added",
       description: `${newProduct.name} has been added to inventory.`,
@@ -736,8 +846,20 @@ function DashboardPageContent() {
   }
 
   const handleUpdateProduct = (updatedProduct: Product) => {
-    const updatedProducts = products.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
-    setProducts(updatedProducts)
+    const update = async () => {
+      try {
+        const res = await fetch('/api/products', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedProduct) })
+        const json = await res.json()
+        if (json.success && json.product) {
+          setProducts((prev) => prev.map((p) => (p.id === json.product.id ? json.product : p)))
+        } else {
+          setProducts((prev) => prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)))
+        }
+      } catch (e) {
+        setProducts((prev) => prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)))
+      }
+    }
+    update()
     toast({
       title: "Product Updated",
       description: `${updatedProduct.name} has been updated successfully.`,
@@ -747,7 +869,15 @@ function DashboardPageContent() {
   const handleDeleteProduct = (productId: string, productName: string) => {
     const productToDelete = products.find((p) => p.id === productId)
     if (productToDelete) {
-      handleMoveToTrash(productToDelete, "product")
+      const remove = async () => {
+        try {
+          await fetch(`/api/products?id=${productId}`, { method: 'DELETE' })
+        } catch (e) {
+          // ignore
+        }
+        handleMoveToTrash(productToDelete, "product")
+      }
+      remove()
     }
   }
 
@@ -789,42 +919,79 @@ function DashboardPageContent() {
 
     console.log("[v0] New invoice ID:", invoiceId)
 
-    const completeInvoice: Invoice = {
-      ...newInvoice,
-      id: invoiceId,
-      createdAt: invoiceDateString,
+    const create = async () => {
+      const payload = {
+        tracking_id: invoiceId,
+        customer_name: newInvoice.customerName,
+        customer_email: newInvoice.customerEmail,
+        customer_phone: newInvoice.customerPhone,
+        total_amount: newInvoice.totalAmount,
+        total_cost: newInvoice.totalCost,
+        total_profit: newInvoice.totalProfit,
+        profit_percentage: newInvoice.profitPercentage,
+        currency: newInvoice.currency,
+        status: newInvoice.status,
+        items: newInvoice.items?.map((it) => ({ product_id: it.productId, product_name: it.productName, quantity: it.quantity, unit_price: it.unitPrice, cost_price: it.costPrice })) || [],
+      }
+      try {
+        const res = await fetch('/api/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        const json = await res.json()
+        if (json.success && json.invoice) {
+          setInvoices((prev) => [json.invoice, ...prev])
+          toast({ title: 'Invoice Created', description: `Invoice ${invoiceId} has been created successfully for ${invoiceMonth}/${invoiceYear}!` })
+          return
+        }
+      } catch (e) {
+        console.error('Invoice create failed, falling back to local state', e)
+      }
+
+      // Fallback to local state
+      const completeInvoice: Invoice = {
+        ...newInvoice,
+        id: invoiceId,
+        createdAt: invoiceDateString,
+      }
+      setInvoices((prev) => [completeInvoice, ...prev])
+      toast({ title: 'Invoice Created (local)', description: `Invoice ${invoiceId} saved locally.` })
     }
 
-    setInvoices((prev) => {
-      console.log("[v0] Current invoices count:", prev.length)
-      if (prev.some((inv) => inv.id === invoiceId)) {
-        console.log("[v0] Invoice ID already exists, skipping")
-        return prev
-      }
-      console.log("[v0] Adding invoice, new count will be:", prev.length + 1)
-      return [completeInvoice, ...prev]
-    })
-
-    toast({
-      title: "Invoice Created",
-      description: `Invoice ${invoiceId} has been created successfully for ${invoiceMonth}/${invoiceYear}!`,
-    })
+    create()
   }
 
   const handleUpdateInvoice = (updatedInvoice: Invoice) => {
-    const updatedInvoices = invoices.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv))
-    setInvoices(updatedInvoices)
-    setEditingInvoice(null)
-    toast({
-      title: "Invoice Updated",
-      description: `Invoice ${updatedInvoice.id} has been updated successfully.`,
-    })
+    const update = async () => {
+      try {
+        const res = await fetch('/api/invoices', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedInvoice) })
+        const json = await res.json()
+        if (json.success && json.invoice) {
+          setInvoices((prev) => prev.map((inv) => (inv.id === updatedInvoice.id ? json.invoice : inv)))
+          setEditingInvoice(null)
+          toast({ title: 'Invoice Updated', description: `Invoice ${updatedInvoice.id} has been updated successfully.` })
+          return
+        }
+      } catch (e) {
+        console.error('Invoice update failed, falling back to local state', e)
+      }
+      setInvoices((prev) => prev.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv)))
+      setEditingInvoice(null)
+      toast({ title: 'Invoice Updated (local)', description: `Invoice ${updatedInvoice.id} updated locally.` })
+    }
+
+    update()
   }
 
   const handleDeleteInvoice = (invoiceId: string) => {
     const invoiceToDelete = invoices.find((inv) => inv.id === invoiceId)
     if (invoiceToDelete) {
-      handleMoveToTrash(invoiceToDelete, "invoice")
+      const remove = async () => {
+        try {
+          await fetch(`/api/invoices?id=${invoiceId}`, { method: 'DELETE' })
+        } catch (e) {
+          // ignore
+        }
+        handleMoveToTrash(invoiceToDelete, "invoice")
+      }
+      remove()
     }
   }
 
@@ -979,6 +1146,15 @@ function DashboardPageContent() {
 
       doc.save(`invoice-${invoice.id}-${invoice.customerName.replace(/\s/g, "_")}.pdf`)
 
+      // Save PDF to database
+      await savePDFToDatabase(doc, {
+        filename: `invoice-${invoice.id}-${invoice.customerName.replace(/\s/g, "_")}.pdf`,
+        type: "invoice",
+        entity_id: invoice.id,
+        entity_type: "invoice",
+        created_by: invoice.customerEmail,
+      })
+
       toast({
         title: "PDF Downloaded Successfully",
         description: `Invoice ${invoice.id} has been downloaded as a PDF file.`,
@@ -1015,8 +1191,20 @@ function DashboardPageContent() {
   }
 
   const handleAddDeal = (newDeal: Deal) => {
-    const updatedDeals = [...deals, { ...newDeal, createdAt: getCurrentDate() }]
-    setDeals(updatedDeals)
+    const create = async () => {
+      try {
+        const res = await fetch('/api/deals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newDeal) })
+        const json = await res.json()
+        if (json.success && json.deal) {
+          setDeals((prev) => [json.deal, ...prev])
+          return
+        }
+      } catch (e) {
+        // fallback to local
+      }
+      setDeals((prev) => [...prev, { ...newDeal, createdAt: getCurrentDate() }])
+    }
+    create()
     toast({
       title: "Deal Created",
       description: `${newDeal.name} has been added.`,
@@ -1024,8 +1212,20 @@ function DashboardPageContent() {
   }
 
   const handleUpdateDeal = (updatedDeal: Deal) => {
-    const updatedDeals = deals.map((d) => (d.id === updatedDeal.id ? updatedDeal : d))
-    setDeals(updatedDeals)
+    const update = async () => {
+      try {
+        const res = await fetch('/api/deals', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedDeal) })
+        const json = await res.json()
+        if (json.success && json.deal) {
+          setDeals((prev) => prev.map((d) => (d.id === json.deal.id ? json.deal : d)))
+          return
+        }
+      } catch (e) {
+        // fallback
+      }
+      setDeals((prev) => prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d)))
+    }
+    update()
     toast({
       title: "Deal Updated",
       description: `${updatedDeal.name} has been updated.`,
@@ -1035,7 +1235,15 @@ function DashboardPageContent() {
   const handleDeleteDeal = (dealId: string) => {
     const dealToDelete = deals.find((d) => d.id === dealId)
     if (dealToDelete) {
-      handleMoveToTrash(dealToDelete, "deal")
+      const remove = async () => {
+        try {
+          await fetch(`/api/deals?id=${dealId}`, { method: 'DELETE' })
+        } catch (e) {
+          // ignore
+        }
+        handleMoveToTrash(dealToDelete, "deal")
+      }
+      remove()
     }
   }
 
@@ -1131,6 +1339,14 @@ function DashboardPageContent() {
 
       doc.save(`deal-${deal.name.replace(/\s/g, "_")}.pdf`)
 
+      // Save PDF to database
+      await savePDFToDatabase(doc, {
+        filename: `deal-${deal.name.replace(/\s/g, "_")}.pdf`,
+        type: "deal",
+        entity_id: deal.id,
+        entity_type: "deal",
+      })
+
       toast({
         title: "Deal PDF Downloaded",
         description: `Deal "${deal.name}" has been downloaded as a PDF.`,
@@ -1145,27 +1361,101 @@ function DashboardPageContent() {
     }
   }
 
+  const handleAddVendor = (newVendor: Vendor) => {
+    const create = async () => {
+      try {
+        const res = await fetch('/api/vendors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newVendor) })
+        const json = await res.json()
+        if (json.success && json.vendor) {
+          setVendors((prev) => [json.vendor, ...prev])
+          return
+        }
+      } catch (e) {
+        // fallback
+      }
+      setVendors((prev) => [newVendor, ...prev])
+    }
+    create()
+  }
+
+  const handleUpdateVendor = (updatedVendor: Vendor) => {
+    const update = async () => {
+      try {
+        const res = await fetch('/api/vendors', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedVendor) })
+        const json = await res.json()
+        if (json.success && json.vendor) {
+          setVendors((prev) => prev.map((v) => (v.id === json.vendor.id ? json.vendor : v)))
+          return
+        }
+      } catch (e) {
+        // fallback
+      }
+      setVendors((prev) => prev.map((v) => (v.id === updatedVendor.id ? updatedVendor : v)))
+    }
+    update()
+  }
+
   const handleDeleteVendor = (vendorId: string) => {
     const vendorToDelete = vendors.find((v) => v.id === vendorId)
     if (vendorToDelete) {
-      handleMoveToTrash(vendorToDelete, "vendor")
+      const remove = async () => {
+        try {
+          await fetch(`/api/vendors?id=${vendorId}`, { method: 'DELETE' })
+        } catch (e) {
+          // ignore
+        }
+        handleMoveToTrash(vendorToDelete, "vendor")
+      }
+      remove()
     }
   }
 
   const handleAddCustomer = (newCustomer: Customer) => {
-    const updatedCustomers = [...customers, newCustomer]
-    setCustomers(updatedCustomers)
+    const create = async () => {
+      try {
+        const res = await fetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCustomer) })
+        const json = await res.json()
+        if (json.success && json.customer) {
+          setCustomers((prev) => [json.customer, ...prev])
+          return
+        }
+      } catch (e) {
+        // fallback
+      }
+      setCustomers((prev) => [newCustomer, ...prev])
+    }
+    create()
   }
 
   const handleUpdateCustomer = (updatedCustomer: Customer) => {
-    const updatedCustomers = customers.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c))
-    setCustomers(updatedCustomers)
+    const update = async () => {
+      try {
+        const res = await fetch('/api/customers', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedCustomer) })
+        const json = await res.json()
+        if (json.success && json.customer) {
+          setCustomers((prev) => prev.map((c) => (c.id === json.customer.id ? json.customer : c)))
+          return
+        }
+      } catch (e) {
+        // fallback
+      }
+      setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)))
+    }
+    update()
   }
 
   const handleDeleteCustomer = (customerId: string) => {
     const customerToDelete = customers.find((c) => c.id === customerId)
     if (customerToDelete) {
-      handleMoveToTrash(customerToDelete, "customer")
+      const remove = async () => {
+        try {
+          await fetch(`/api/customers?id=${customerId}`, { method: 'DELETE' })
+        } catch (e) {
+          // ignore
+        }
+        handleMoveToTrash(customerToDelete, "customer")
+      }
+      remove()
     }
   }
 
@@ -1540,6 +1830,8 @@ function DashboardPageContent() {
             allInvoices={invoices}
             vendors={vendors}
             setVendors={setVendors}
+            onAddVendor={handleAddVendor}
+            onUpdateVendor={handleUpdateVendor}
             onDeleteVendor={handleDeleteVendor}
           />
         )}

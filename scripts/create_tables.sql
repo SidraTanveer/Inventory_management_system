@@ -123,3 +123,23 @@ CREATE TABLE IF NOT EXISTS trash_items (
   data JSONB NOT NULL,
   deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- PDF storage and management
+CREATE TABLE IF NOT EXISTS pdfs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  filename TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('invoice', 'deal', 'product', 'customers', 'vendors', 'invoices_export', 'products_export', 'daily_orders', 'monthly_report')),
+  entity_id UUID,
+  entity_type TEXT,
+  pdf_data BYTEA NOT NULL,
+  file_size INTEGER NOT NULL,
+  mime_type TEXT DEFAULT 'application/pdf',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by TEXT
+);
+
+-- Create index for faster PDF lookups
+CREATE INDEX IF NOT EXISTS idx_pdfs_type ON pdfs(type);
+CREATE INDEX IF NOT EXISTS idx_pdfs_entity ON pdfs(entity_id, entity_type);
+CREATE INDEX IF NOT EXISTS idx_pdfs_created_at ON pdfs(created_at DESC);
+
