@@ -69,22 +69,15 @@ This project is an inventory and sales dashboard that includes:
 
 ## Environment Variables
 
-Required local and production environment variable:
+Required environment variables:
 
-- `DATABASE_URL` - PostgreSQL connection string for Neon or any PostgreSQL server.
-- `NEON_POSTGRES_URL` - alternative source used by the app if `DATABASE_URL` is not set.
-- `storage_POSTGRES_URL_NON_POOLING` / `STORAGE_POSTGRES_URL_NON_POOLING` - Supabase direct Postgres connection string.
-- `storage_POSTGRES_URL` / `STORAGE_POSTGRES_URL` - Supabase pooler connection string.
-- `storage_POSTGRES_PRISMA_URL` / `STORAGE_POSTGRES_PRISMA_URL` - alternative Supabase Postgres URL used by Prisma-style workflows.
+- `DATABASE_URL` - PostgreSQL connection string for Neon serverless database.
+- `NEON_AUTH_COOKIE_SECRET` - Secret key for authentication session management.
 
-Example using Supabase direct Postgres URL:
+Example `.env.local`:
 ```env
-storage_POSTGRES_URL_NON_POOLING=postgres://postgres:<password>@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require
-```
-
-Example using Supabase pooler URL:
-```env
-storage_POSTGRES_URL=postgres://postgres:<password>@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require&supa=base-pooler.x
+DATABASE_URL=postgresql://user:password@ep-xxx.c-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require
+NEON_AUTH_COOKIE_SECRET=your-random-secret-key
 ```
 
 ## Database Schema
