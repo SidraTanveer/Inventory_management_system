@@ -4,54 +4,43 @@ import { addDeal, getDeals, updateDeal, deleteDeal } from "@/lib/auth"
 export async function GET() {
   try {
     const deals = await getDeals()
-    return NextResponse.json(deals)
+    return NextResponse.json({ success: true, deals })
   } catch (error) {
-    console.error("[v0] Error fetching deals:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch deals" },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to load deals" }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const { name, description, discountPercentage, expiryDate } = await request.json()
+    const body = await request.json()
+    const { name, description, discountPercentage, expiryDate } = body
     const deal = await addDeal(name, description, discountPercentage, expiryDate)
-    return NextResponse.json(deal, { status: 201 })
+    return NextResponse.json({ success: true, deal }, { status: 201 })
   } catch (error) {
-    console.error("[v0] Error adding deal:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to add deal" },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to create deal" }, { status: 500 })
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    const { id, name, description, discountPercentage, expiryDate } = await request.json()
+    const body = await request.json()
+    const { id, name, description, discountPercentage, expiryDate } = body
+    if (!id) return NextResponse.json({ success: false, error: "Deal id required" }, { status: 400 })
     const deal = await updateDeal(id, name, description, discountPercentage, expiryDate)
-    return NextResponse.json(deal)
+    return NextResponse.json({ success: true, deal })
   } catch (error) {
-    console.error("[v0] Error updating deal:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update deal" },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to update deal" }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    const { id } = await request.json()
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get("id")
+    if (!id) return NextResponse.json({ success: false, error: "Deal id is required" }, { status: 400 })
     await deleteDeal(id)
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("[v0] Error deleting deal:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to delete deal" },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to delete deal" }, { status: 500 })
   }
 }

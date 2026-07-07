@@ -1,3 +1,4 @@
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 const { readFileSync } = require("fs")
 const { Pool } = require("pg")
 const path = require("path")
@@ -17,10 +18,18 @@ function loadEnv(filePath) {
 const root = path.resolve(__dirname, "..")
 const envPath = path.join(root, ".env.local")
 const env = loadEnv(envPath)
-const connectionString = env.NEON_POSTGRES_URL || env.DATABASE_URL
+const connectionString =
+  env.NEON_POSTGRES_URL ||
+  env.DATABASE_URL ||
+  env.storage_POSTGRES_URL_NON_POOLING ||
+  env.STORAGE_POSTGRES_URL_NON_POOLING ||
+  env.storage_POSTGRES_URL ||
+  env.STORAGE_POSTGRES_URL ||
+  env.storage_POSTGRES_PRISMA_URL ||
+  env.STORAGE_POSTGRES_PRISMA_URL
 
 if (!connectionString) {
-  throw new Error("Missing database connection string. Set NEON_POSTGRES_URL or DATABASE_URL in .env.local or the environment.")
+  throw new Error("Missing database connection string. Set NEON_POSTGRES_URL, DATABASE_URL, or a supported Supabase storage POSTGRES URL in .env.local or the environment.")
 }
 
 const pool = new Pool({

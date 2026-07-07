@@ -72,10 +72,19 @@ This project is an inventory and sales dashboard that includes:
 Required local and production environment variable:
 
 - `DATABASE_URL` - PostgreSQL connection string for Neon or any PostgreSQL server.
+- `NEON_POSTGRES_URL` - alternative source used by the app if `DATABASE_URL` is not set.
+- `storage_POSTGRES_URL_NON_POOLING` / `STORAGE_POSTGRES_URL_NON_POOLING` - Supabase direct Postgres connection string.
+- `storage_POSTGRES_URL` / `STORAGE_POSTGRES_URL` - Supabase pooler connection string.
+- `storage_POSTGRES_PRISMA_URL` / `STORAGE_POSTGRES_PRISMA_URL` - alternative Supabase Postgres URL used by Prisma-style workflows.
 
-Example:
+Example using Supabase direct Postgres URL:
 ```env
-DATABASE_URL=postgresql://neondb_owner:password@ep-sweet-glade-atz88net-pooler.c-9.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require
+storage_POSTGRES_URL_NON_POOLING=postgres://postgres:<password>@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require
+```
+
+Example using Supabase pooler URL:
+```env
+storage_POSTGRES_URL=postgres://postgres:<password>@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require&supa=base-pooler.x
 ```
 
 ## Database Schema

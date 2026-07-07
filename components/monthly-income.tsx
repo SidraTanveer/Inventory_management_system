@@ -12,6 +12,7 @@ import type { Invoice, Product } from "@/types/app"
 import { formatCurrency } from "@/lib/utils"
 import jsPDF from "jspdf"
 import { useAuth } from "@/hooks/useAuth"
+import { savePDFToDatabase } from "@/lib/pdf-utils"
 import {
   FileText,
   Download,
@@ -913,6 +914,12 @@ export function MonthlyIncome({
       const today = new Date().toISOString().split("T")[0]
       const filename = `Glow_With_Vibes_Monthly_Report_${formatSelectedMonth().replace(" ", "_")}_${today}.pdf`
       pdf.save(filename)
+
+      // Save to database
+      await savePDFToDatabase(pdf, {
+        filename,
+        type: "monthly_report",
+      })
     } catch (err) {
       console.error("Failed to generate PDF:", err)
     } finally {

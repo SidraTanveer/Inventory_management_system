@@ -19,6 +19,7 @@ import { formatDate, getCurrentDate, generateId } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { generateCustomersPDF } from "@/components/data-export-pdf-generator"
 import { exportCustomersToExcel, importCustomersFromExcel } from "@/lib/excel-utils"
+import { savePDFToDatabase } from "@/lib/pdf-utils"
 
 interface CustomerManagementProps {
   customers: Customer[]
@@ -118,7 +119,15 @@ export function CustomerManagement({
   }
 
   const handleDownloadAllCustomers = async () => {
-    await generateCustomersPDF(customers, invoices, currentAppCurrency)
+    const doc = await generateCustomersPDF(customers, invoices, currentAppCurrency)
+    doc.save(`customers-detailed-${new Date().toISOString().split("T")[0]}.pdf`)
+
+    // Save to database
+    await savePDFToDatabase(doc, {
+      filename: `customers-detailed-${new Date().toISOString().split("T")[0]}.pdf`,
+      type: "customers",
+    })
+
     toast({
       title: "PDF Downloaded",
       description: `All ${customers.length} customers exported to PDF.`,

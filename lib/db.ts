@@ -1,6 +1,16 @@
 import { Pool } from "pg"
 
-const connectionString = process.env.NEON_POSTGRES_URL || process.env.DATABASE_URL
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+
+const connectionString =
+  process.env.NEON_POSTGRES_URL ||
+  process.env.DATABASE_URL ||
+  process.env.storage_POSTGRES_URL_NON_POOLING ||
+  process.env.STORAGE_POSTGRES_URL_NON_POOLING ||
+  process.env.storage_POSTGRES_URL ||
+  process.env.STORAGE_POSTGRES_URL ||
+  process.env.storage_POSTGRES_PRISMA_URL ||
+  process.env.STORAGE_POSTGRES_PRISMA_URL
 
 // Only throw error at runtime, not at build time
 let pool: Pool | null = null
@@ -15,7 +25,9 @@ function getPool() {
     })
   }
   if (!pool) {
-    throw new Error("Missing database connection string. Set DATABASE_URL in your environment.")
+    throw new Error(
+      "Missing database connection string. Set NEON_POSTGRES_URL, DATABASE_URL, or a supported Supabase storage POSTGRES URL in your environment.",
+    )
   }
   return pool
 }

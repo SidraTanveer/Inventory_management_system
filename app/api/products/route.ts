@@ -4,54 +4,43 @@ import { addProduct, getProducts, updateProduct, deleteProduct } from "@/lib/aut
 export async function GET() {
   try {
     const products = await getProducts()
-    return NextResponse.json(products)
+    return NextResponse.json({ success: true, products })
   } catch (error) {
-    console.error("[v0] Error fetching products:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch products" },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to load products" }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const { name, description, unitPrice, costPrice, stock, vendorId, category, sku } = await request.json()
+    const body = await request.json()
+    const { name, description, unitPrice, costPrice, stock, vendorId, category, sku } = body
     const product = await addProduct(name, description, unitPrice, costPrice, stock, vendorId, category, sku)
-    return NextResponse.json(product, { status: 201 })
+    return NextResponse.json({ success: true, product }, { status: 201 })
   } catch (error) {
-    console.error("[v0] Error adding product:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to add product" },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to create product" }, { status: 500 })
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    const { id, name, description, unitPrice, costPrice, stock, vendorId, category, sku } = await request.json()
+    const body = await request.json()
+    const { id, name, description, unitPrice, costPrice, stock, vendorId, category, sku } = body
+    if (!id) return NextResponse.json({ success: false, error: "Product id required" }, { status: 400 })
     const product = await updateProduct(id, name, description, unitPrice, costPrice, stock, vendorId, category, sku)
-    return NextResponse.json(product)
+    return NextResponse.json({ success: true, product })
   } catch (error) {
-    console.error("[v0] Error updating product:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update product" },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to update product" }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    const { id } = await request.json()
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get("id")
+    if (!id) return NextResponse.json({ success: false, error: "Product id is required" }, { status: 400 })
     await deleteProduct(id)
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("[v0] Error deleting product:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to delete product" },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to delete product" }, { status: 500 })
   }
 }

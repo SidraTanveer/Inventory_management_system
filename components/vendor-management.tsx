@@ -23,6 +23,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { generateVendorsPDF } from "@/components/data-export-pdf-generator"
 import { exportVendorsToExcel, importVendorsFromExcel } from "@/lib/excel-utils"
 import { useToast } from "@/hooks/use-toast"
+import { savePDFToDatabase } from "@/lib/pdf-utils"
 
 interface Vendor {
   id: string
@@ -40,6 +41,8 @@ interface VendorManagementProps {
   allInvoices: Invoice[]
   vendors: Vendor[]
   setVendors: React.Dispatch<React.SetStateAction<Vendor[]>>
+  onAddVendor: (vendor: Vendor) => void
+  onUpdateVendor: (vendor: Vendor) => void
   onDeleteVendor: (vendorId: string) => void
 }
 
@@ -50,6 +53,8 @@ export function VendorManagement({
   allInvoices,
   vendors,
   setVendors,
+  onAddVendor,
+  onUpdateVendor,
   onDeleteVendor,
 }: VendorManagementProps) {
   const { user: currentUser } = useAuth()
@@ -82,7 +87,7 @@ export function VendorManagement({
       ...formData,
       createdAt: new Date().toISOString().split("T")[0],
     }
-    setVendors([...vendors, newVendor])
+    onAddVendor(newVendor)
     setIsAddDialogOpen(false)
     resetForm()
   }
@@ -104,7 +109,7 @@ export function VendorManagement({
         ...editingVendor,
         ...formData,
       }
-      setVendors(vendors.map((v) => (v.id === updatedVendor.id ? updatedVendor : v)))
+      onUpdateVendor(updatedVendor)
       setIsEditDialogOpen(false)
       setEditingVendor(null)
       resetForm()
@@ -121,7 +126,14 @@ export function VendorManagement({
   }
 
   const handleDownloadAllVendors = async () => {
-    await generateVendorsPDF(vendors, products, currentAppCurrency)
+    const doc = await generateVendorsPDF(vendors, products, currentAppCurrency)
+    doc.save(`vendors-detailed-${new Date().toISOString().split("T")[0]}.pdf`)
+
+    // Save to database
+    await savePDFToDatabase(doc, {
+      filename: `vendors-detailed-${new Date().toISOString().split("T")[0]}.pdf`,
+      type: "vendors",
+    })
   }
 
   const handleDownloadAllVendorsExcel = () => {
