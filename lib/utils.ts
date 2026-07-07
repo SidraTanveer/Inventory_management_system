@@ -64,9 +64,20 @@ export function getDaysSince(dateString: string): number {
   return Math.floor(diffTime / (1000 * 60 * 60 * 24))
 }
 
+// Helper to check if localStorage is available (browser environment)
+function isLocalStorageAvailable(): boolean {
+  try {
+    return typeof window !== "undefined" && typeof localStorage !== "undefined"
+  } catch {
+    return false
+  }
+}
+
 // Add these two new internal helper functions at the top of the file, before `saveToLocalStorage`.
 // They will load the raw stored object with metadata.
 function _loadRawStoredData(key: string): { data: any; lastUpdated: string; version: string; deviceId: string } | null {
+  if (!isLocalStorageAvailable()) return null
+  
   try {
     const stored = localStorage.getItem(key)
     if (stored) {
@@ -89,6 +100,8 @@ function _loadRawStoredData(key: string): { data: any; lastUpdated: string; vers
 function _loadRawCloudBackupData(
   key: string,
 ): { data: any; lastUpdated: string; version: string; deviceId: string } | null {
+  if (!isLocalStorageAvailable()) return null
+  
   try {
     const cloudKey = `cloud_backup_${key}`
     const stored = localStorage.getItem(cloudKey)
@@ -108,6 +121,8 @@ function _loadRawCloudBackupData(
 
 // Enhanced data persistence with cloud sync simulation
 export function saveToLocalStorage(key: string, data: any): void {
+  if (!isLocalStorageAvailable()) return
+  
   try {
     const dataWithTimestamp = {
       data,
@@ -141,6 +156,8 @@ export function loadFromCloudBackup(key: string): any {
 
 // Cloud backup simulation using localStorage with different keys
 function saveToCloudBackup(key: string, data: any): void {
+  if (!isLocalStorageAvailable()) return
+  
   try {
     const cloudKey = `cloud_backup_${key}`
     localStorage.setItem(cloudKey, JSON.stringify(data))
@@ -207,12 +224,18 @@ export function syncDataAcrossDevices(keys: string[]): { [key: string]: any } {
 
 // Device identification for sync purposes
 function getDeviceId(): string {
-  let deviceId = localStorage.getItem("device_id")
-  if (!deviceId) {
-    deviceId = generateId()
-    localStorage.setItem("device_id", deviceId)
+  if (!isLocalStorageAvailable()) return "unknown-device"
+  
+  try {
+    let deviceId = localStorage.getItem("device_id")
+    if (!deviceId) {
+      deviceId = generateId()
+      localStorage.setItem("device_id", deviceId)
+    }
+    return deviceId
+  } catch {
+    return "unknown-device"
   }
-  return deviceId
 }
 
 // Export all data for backup
