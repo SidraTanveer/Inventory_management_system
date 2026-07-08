@@ -8,8 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Invoice, Product, User } from "@/types/app"
 import { formatCurrency } from "@/lib/utils"
-import { Search, Calendar, Download, Eye, Edit, Trash2, Plus, CheckCircle } from "lucide-react"
-import { InvoiceCreateDialog } from "@/components/invoice-create-dialog"
+import { Search, Calendar, Download, Eye, Edit, Trash2, CheckCircle } from "lucide-react"
 import { generateDailyOrdersPDF } from "@/components/daily-orders-pdf-generator"
 import { exportDailyOrdersToExcel } from "@/lib/excel-utils"
 import { savePDFToDatabase } from "@/lib/pdf-utils"
@@ -35,6 +34,7 @@ interface DailyOrdersProps {
   onMarkInvoiceAsPaid: (invoiceId: string) => void
   currentAppCurrency: string
   user: User
+  customers?: { id: string; name: string; email: string; phone?: string }[]
 }
 
 export function DailyOrders({
@@ -56,7 +56,6 @@ export function DailyOrders({
     return today.toISOString().split("T")[0]
   })
   const [filterStatus, setFilterStatus] = useState("all")
-  const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false)
   const [isDownloadingAll, setIsDownloadingAll] = useState(false)
   const { toast } = useToast()
 
@@ -214,16 +213,6 @@ export function DailyOrders({
             </h1>
             <p className="text-blue-100">Track and manage your daily sales orders</p>
           </div>
-          {user?.role === "admin" && (
-            <Button
-              onClick={() => setIsCreateInvoiceOpen(true)}
-              className="bg-white/20 hover:bg-white/30 text-white border-white/30"
-              size="lg"
-            >
-              <Plus className="mr-2 h-5 w-5" />
-              Create New Order
-            </Button>
-          )}
         </div>
       </div>
 
@@ -446,32 +435,11 @@ export function DailyOrders({
               <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Calendar className="h-8 w-8 text-blue-600" />
               </div>
-              <p className="text-gray-500 mb-4">No orders found for the selected date</p>
-              {user?.role === "admin" && (
-                <Button
-                  onClick={() => setIsCreateInvoiceOpen(true)}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Your First Order Today
-                </Button>
-              )}
+              <p className="text-gray-500">No orders found for the selected date</p>
             </div>
           )}
         </CardContent>
       </Card>
-
-      {/* Invoice Create Dialog */}
-      <InvoiceCreateDialog
-        isOpen={isCreateInvoiceOpen}
-        onClose={() => setIsCreateInvoiceOpen(false)}
-        onSave={onCreateInvoice}
-        products={products}
-        customers={customers}
-        existingInvoices={invoices}
-        currentAppCurrency={currentAppCurrency}
-        isAdmin={user?.role === "admin"}
-      />
     </div>
   )
 }

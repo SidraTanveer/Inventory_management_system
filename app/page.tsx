@@ -1705,6 +1705,7 @@ function DashboardPageContent() {
             onCreateInvoice={handleCreateInvoice}
             currentAppCurrency={currentAppCurrency}
             user={user}
+            customers={customers}
           />
         )}
         {activeTab === "products" && (
