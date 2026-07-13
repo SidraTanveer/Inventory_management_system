@@ -49,6 +49,7 @@ export function DailyOrders({
   onMarkInvoiceAsPaid,
   currentAppCurrency,
   user,
+  customers: propCustomers,
 }: DailyOrdersProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedDate, setSelectedDate] = useState(() => {
