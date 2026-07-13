@@ -17,6 +17,20 @@ import { useToast } from "@/hooks/use-toast"
 // Helper functions
 const normalizeStatus = (status?: Invoice["status"]): Invoice["status"] => status ?? "pending"
 
+// Safe date parsing function
+const safeParseDate = (dateString: string | undefined): string => {
+  if (!dateString) return new Date().toISOString().split("T")[0]
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) {
+      return new Date().toISOString().split("T")[0]
+    }
+    return date.toISOString().split("T")[0]
+  } catch {
+    return new Date().toISOString().split("T")[0]
+  }
+}
+
 const formatStatusLabel = (status?: Invoice["status"]) => {
   const s = normalizeStatus(status)
   return s.charAt(0).toUpperCase() + s.slice(1)
@@ -84,7 +98,7 @@ export function DailyOrders({
     // Filter by selected date
     if (selectedDate) {
       filtered = filtered.filter((invoice) => {
-        const invoiceDate = new Date(invoice.createdAt).toISOString().split("T")[0]
+        const invoiceDate = safeParseDate(invoice.createdAt)
         return invoiceDate === selectedDate
       })
     }
@@ -106,12 +120,16 @@ export function DailyOrders({
       )
     }
 
-    return filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    return filtered.sort((a, b) => {
+      const dateA = safeParseDate(a.createdAt)
+      const dateB = safeParseDate(b.createdAt)
+      return new Date(dateB).getTime() - new Date(dateA).getTime()
+    })
   }, [invoices, selectedDate, filterStatus, searchTerm])
 
   const dailyStats = useMemo(() => {
     const todayInvoices = filteredInvoices.filter((invoice) => {
-      const invoiceDate = new Date(invoice.createdAt).toISOString().split("T")[0]
+      const invoiceDate = safeParseDate(invoice.createdAt)
       return invoiceDate === selectedDate
     })
 
