@@ -14,7 +14,7 @@ import { exportDailyOrdersToExcel } from "@/lib/excel-utils"
 import { savePDFToDatabase } from "@/lib/pdf-utils"
 import { useToast } from "@/hooks/use-toast"
 
-// Helper ⚡
+// Helper functions
 const normalizeStatus = (status?: Invoice["status"]): Invoice["status"] => status ?? "pending"
 
 const formatStatusLabel = (status?: Invoice["status"]) => {
