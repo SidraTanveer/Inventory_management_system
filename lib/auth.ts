@@ -196,3 +196,199 @@ export async function changeUserPassword(userId: string, currentPassword: string
   await query("UPDATE users SET password_hash = $1 WHERE id = $2", [hashPassword(newPassword), userId])
   return true
 }
+
+// Vendor functions
+export async function addVendor(name: string, email: string, phone: string, address: string) {
+  const id = randomUUID()
+  const result = await query(
+    `INSERT INTO vendors (id, name, email, phone, address, created_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
+     RETURNING id, name, email, phone, address, created_at`,
+    [id, name, email, phone, address],
+  )
+  return result.rows[0]
+}
+
+export async function getVendors() {
+  const result = await query("SELECT id, name, email, phone, address, created_at FROM vendors ORDER BY created_at DESC")
+  return result.rows
+}
+
+export async function updateVendor(id: string, name: string, email: string, phone: string, address: string) {
+  const result = await query(
+    `UPDATE vendors SET name = $2, email = $3, phone = $4, address = $5 WHERE id = $1
+     RETURNING id, name, email, phone, address, created_at`,
+    [id, name, email, phone, address],
+  )
+  return result.rows[0]
+}
+
+export async function deleteVendor(id: string) {
+  await query("DELETE FROM vendors WHERE id = $1", [id])
+  return true
+}
+
+// Product functions
+export async function addProduct(
+  name: string,
+  description: string,
+  unitPrice: number,
+  costPrice: number,
+  stock: number,
+  vendorId: string,
+  category: string,
+  sku: string,
+) {
+  const id = randomUUID()
+  const result = await query(
+    `INSERT INTO products (id, name, description, unit_price, cost_price, stock, vendor_id, category, sku, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+     RETURNING id, name, description, unit_price, cost_price, stock, vendor_id, category, sku, created_at`,
+    [id, name, description, unitPrice, costPrice, stock, vendorId, category, sku],
+  )
+  return result.rows[0]
+}
+
+export async function getProducts() {
+  const result = await query(
+    "SELECT id, name, description, unit_price, cost_price, stock, vendor_id, category, sku, created_at FROM products ORDER BY created_at DESC",
+  )
+  return result.rows
+}
+
+export async function updateProduct(
+  id: string,
+  name: string,
+  description: string,
+  unitPrice: number,
+  costPrice: number,
+  stock: number,
+  vendorId: string,
+  category: string,
+  sku: string,
+) {
+  const result = await query(
+    `UPDATE products SET name = $2, description = $3, unit_price = $4, cost_price = $5, stock = $6, vendor_id = $7, category = $8, sku = $9 WHERE id = $1
+     RETURNING id, name, description, unit_price, cost_price, stock, vendor_id, category, sku, created_at`,
+    [id, name, description, unitPrice, costPrice, stock, vendorId, category, sku],
+  )
+  return result.rows[0]
+}
+
+export async function deleteProduct(id: string) {
+  await query("DELETE FROM products WHERE id = $1", [id])
+  return true
+}
+
+// Customer functions
+export async function addCustomer(name: string, email: string, phone: string, type: string) {
+  const id = randomUUID()
+  const result = await query(
+    `INSERT INTO customers (id, name, email, phone, type, created_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
+     RETURNING id, name, email, phone, type, created_at`,
+    [id, name, email, phone, type],
+  )
+  return result.rows[0]
+}
+
+export async function getCustomers() {
+  const result = await query("SELECT id, name, email, phone, type, created_at FROM customers ORDER BY created_at DESC")
+  return result.rows
+}
+
+export async function updateCustomer(id: string, name: string, email: string, phone: string, type: string) {
+  const result = await query(
+    `UPDATE customers SET name = $2, email = $3, phone = $4, type = $5 WHERE id = $1
+     RETURNING id, name, email, phone, type, created_at`,
+    [id, name, email, phone, type],
+  )
+  return result.rows[0]
+}
+
+export async function deleteCustomer(id: string) {
+  await query("DELETE FROM customers WHERE id = $1", [id])
+  return true
+}
+
+// Deal functions
+export async function addDeal(name: string, description: string, discountPercentage: number, expiryDate: string) {
+  const id = randomUUID()
+  const result = await query(
+    `INSERT INTO deals (id, name, description, discount_percentage, expiry_date, created_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
+     RETURNING id, name, description, discount_percentage, expiry_date, created_at`,
+    [id, name, description, discountPercentage, expiryDate],
+  )
+  return result.rows[0]
+}
+
+export async function getDeals() {
+  const result = await query("SELECT id, name, description, discount_percentage, expiry_date, created_at FROM deals ORDER BY created_at DESC")
+  return result.rows
+}
+
+export async function updateDeal(id: string, name: string, description: string, discountPercentage: number, expiryDate: string) {
+  const result = await query(
+    `UPDATE deals SET name = $2, description = $3, discount_percentage = $4, expiry_date = $5 WHERE id = $1
+     RETURNING id, name, description, discount_percentage, expiry_date, created_at`,
+    [id, name, description, discountPercentage, expiryDate],
+  )
+  return result.rows[0]
+}
+
+export async function deleteDeal(id: string) {
+  await query("DELETE FROM deals WHERE id = $1", [id])
+  return true
+}
+
+// Invoice functions
+export async function addInvoice(
+  trackingId: string,
+  customerName: string,
+  customerEmail: string,
+  customerPhone: string,
+  totalAmount: number,
+  totalCost: number,
+  totalProfit: number,
+  profitPercentage: number,
+  currency: string,
+  status: string,
+) {
+  const id = randomUUID()
+  const result = await query(
+    `INSERT INTO invoices (id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost, total_profit, profit_percentage, currency, status, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+     RETURNING id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost, total_profit, profit_percentage, currency, status, created_at`,
+    [id, trackingId, customerName, customerEmail, customerPhone, totalAmount, totalCost, totalProfit, profitPercentage, currency, status],
+  )
+  return result.rows[0]
+}
+
+export async function getInvoices() {
+  const result = await query(
+    "SELECT id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost, total_profit, profit_percentage, currency, status, created_at FROM invoices ORDER BY created_at DESC",
+  )
+  return result.rows
+}
+
+export async function updateInvoice(
+  id: string,
+  status: string,
+  totalAmount: number,
+  totalCost: number,
+  totalProfit: number,
+  profitPercentage: number,
+) {
+  const result = await query(
+    `UPDATE invoices SET status = $2, total_amount = $3, total_cost = $4, total_profit = $5, profit_percentage = $6 WHERE id = $1
+     RETURNING id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost, total_profit, profit_percentage, currency, status, created_at`,
+    [id, status, totalAmount, totalCost, totalProfit, profitPercentage],
+  )
+  return result.rows[0]
+}
+
+export async function deleteInvoice(id: string) {
+  await query("DELETE FROM invoices WHERE id = $1", [id])
+  return true
+}

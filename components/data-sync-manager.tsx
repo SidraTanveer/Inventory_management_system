@@ -33,8 +33,8 @@ export function DataSyncManager({ onDataSync }: DataSyncManagerProps) {
 
   useEffect(() => {
     // Get device info
-    const deviceId = localStorage.getItem("device_id") || "Unknown"
-    const userAgent = navigator.userAgent
+    const deviceId = (typeof window !== "undefined" && localStorage.getItem("device_id")) || "Unknown"
+    const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : ""
     let deviceType = "Desktop"
 
     if (/Mobile|Android|iPhone|iPad/.test(userAgent)) {
@@ -48,9 +48,11 @@ export function DataSyncManager({ onDataSync }: DataSyncManagerProps) {
     setDeviceInfo(`${deviceType} (${deviceId.slice(0, 8)})`)
 
     // Check last sync time
-    const lastSync = localStorage.getItem("last_sync_time")
-    if (lastSync) {
-      setLastSyncTime(lastSync)
+    if (typeof window !== "undefined") {
+      const lastSync = localStorage.getItem("last_sync_time")
+      if (lastSync) {
+        setLastSyncTime(lastSync)
+      }
     }
   }, [])
 
@@ -68,7 +70,9 @@ export function DataSyncManager({ onDataSync }: DataSyncManagerProps) {
 
       const currentTime = getCurrentDateTime()
       setLastSyncTime(currentTime)
-      localStorage.setItem("last_sync_time", currentTime)
+      if (typeof window !== "undefined") {
+        localStorage.setItem("last_sync_time", currentTime)
+      }
       setSyncStatus("success")
 
       toast({

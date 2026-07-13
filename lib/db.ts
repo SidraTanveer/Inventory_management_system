@@ -2,31 +2,31 @@ import { Pool } from "pg"
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
-const connectionString =
-  process.env.NEON_POSTGRES_URL ||
-  process.env.DATABASE_URL ||
-  process.env.storage_POSTGRES_URL_NON_POOLING ||
-  process.env.STORAGE_POSTGRES_URL_NON_POOLING ||
-  process.env.storage_POSTGRES_URL ||
-  process.env.STORAGE_POSTGRES_URL ||
-  process.env.storage_POSTGRES_PRISMA_URL ||
-  process.env.STORAGE_POSTGRES_PRISMA_URL
+const connectionString = process.env.DATABASE_URL || process.env.NEON_POSTGRES_URL
 
-if (!connectionString) {
-  throw new Error(
-    "Missing database connection string. Set NEON_POSTGRES_URL, DATABASE_URL, or a supported Supabase storage POSTGRES URL in your environment.",
-  )
+// Only throw error at runtime, not at build time
+let pool: Pool | null = null
+
+function getPool() {
+  if (!pool && connectionString) {
+    pool = new Pool({
+      connectionString,
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    })
+  }
+  if (!pool) {
+    throw new Error(
+      "Missing database connection string. Set DATABASE_URL in your environment.",
+    )
+  }
+  return pool
 }
 
-export const pool = new Pool({
-  connectionString,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-})
-
 export async function query<T = any>(text: string, params?: any[]) {
-  const client = await pool.connect()
+  const currentPool = getPool()
+  const client = await currentPool.connect()
   try {
     const result = await client.query(text, params)
     return result as { rows: T[] }

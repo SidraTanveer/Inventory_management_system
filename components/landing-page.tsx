@@ -44,7 +44,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             >
               Learn More
             </Button>
-            <Button size="lg" variant="secondary" className="text-lg px-8 py-3" asChild>
+            <Button size="lg" variant="secondary" className="text-lg px-8 py-3 border-2" style={{ color: "rgb(102, 51, 153)" }} asChild>
               <a href="/signup">Sign Up</a>
             </Button>
           </div>
@@ -54,7 +54,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           <Card className="text-center p-6 hover:shadow-lg transition-shadow">
             <CardContent className="pt-6">
               <Package className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Inventory Management</h3>
+              <h3 className="text-xl font-semibold mb-2" style={{ color: "rgb(102, 51, 153)" }}>Inventory Management</h3>
               <p className="text-gray-600">Complete product tracking, stock management, and vendor relationships</p>
             </CardContent>
           </Card>
@@ -62,7 +62,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           <Card className="text-center p-6 hover:shadow-lg transition-shadow">
             <CardContent className="pt-6">
               <TrendingUp className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Sales Analytics</h3>
+              <h3 className="text-xl font-semibold mb-2" style={{ color: "rgb(102, 51, 153)" }}>Sales Analytics</h3>
               <p className="text-gray-600">Detailed reports, profit analysis, and business insights</p>
             </CardContent>
           </Card>
@@ -70,7 +70,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           <Card className="text-center p-6 hover:shadow-lg transition-shadow">
             <CardContent className="pt-6">
               <Users className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">User Management</h3>
+              <h3 className="text-xl font-semibold mb-2" style={{ color: "rgb(102, 51, 153)" }}>User Management</h3>
               <p className="text-gray-600">Role-based access control and team collaboration</p>
             </CardContent>
           </Card>

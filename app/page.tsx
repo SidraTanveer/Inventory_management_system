@@ -585,10 +585,12 @@ function DashboardPageContent() {
         const prodRes = await fetch('/api/products')
         if (prodRes.ok) {
           const prodData = await prodRes.json()
-          if (Array.isArray(prodData)) setProducts(prodData)
+          if (prodData.success && Array.isArray(prodData.products)) {
+            setProducts(prodData.products)
+          }
         }
       } catch (error) {
-        console.warn('Unable to load products from server:', error)
+        console.error("[v0] Error loading products from server:", error instanceof Error ? error.message : error)
       }
 
       try {
@@ -596,10 +598,12 @@ function DashboardPageContent() {
         const invRes = await fetch('/api/invoices')
         if (invRes.ok) {
           const invData = await invRes.json()
-          if (Array.isArray(invData)) setInvoices(invData)
+          if (invData.success && Array.isArray(invData.invoices)) {
+            setInvoices(invData.invoices)
+          }
         }
       } catch (error) {
-        console.warn('Unable to load invoices from server:', error)
+        console.error("[v0] Error loading invoices from server:", error instanceof Error ? error.message : error)
       }
 
       try {
@@ -607,10 +611,12 @@ function DashboardPageContent() {
         const custRes = await fetch('/api/customers')
         if (custRes.ok) {
           const custData = await custRes.json()
-          if (Array.isArray(custData)) setCustomers(custData)
+          if (custData.success && Array.isArray(custData.customers)) {
+            setCustomers(custData.customers)
+          }
         }
       } catch (error) {
-        console.warn('Unable to load customers from server:', error)
+        console.error("[v0] Error loading customers from server:", error instanceof Error ? error.message : error)
       }
 
       try {
@@ -618,10 +624,12 @@ function DashboardPageContent() {
         const vendRes = await fetch('/api/vendors')
         if (vendRes.ok) {
           const vendData = await vendRes.json()
-          if (Array.isArray(vendData)) setVendors(vendData)
+          if (vendData.success && Array.isArray(vendData.vendors)) {
+            setVendors(vendData.vendors)
+          }
         }
       } catch (error) {
-        console.warn('Unable to load vendors from server:', error)
+        console.error("[v0] Error loading vendors from server:", error instanceof Error ? error.message : error)
       }
 
       try {
@@ -629,10 +637,12 @@ function DashboardPageContent() {
         const dealRes = await fetch('/api/deals')
         if (dealRes.ok) {
           const dealData = await dealRes.json()
-          if (Array.isArray(dealData)) setDeals(dealData)
+          if (dealData.success && Array.isArray(dealData.deals)) {
+            setDeals(dealData.deals)
+          }
         }
       } catch (error) {
-        console.warn('Unable to load deals from server:', error)
+        console.error("[v0] Error loading deals from server:", error instanceof Error ? error.message : error)
       }
 
       try {
@@ -640,10 +650,12 @@ function DashboardPageContent() {
         const trashRes = await fetch('/api/trash')
         if (trashRes.ok) {
           const trashData = await trashRes.json()
-          if (Array.isArray(trashData)) setTrashItems(trashData)
+          if (trashData.success && Array.isArray(trashData.trashItems)) {
+            setTrashItems(trashData.trashItems)
+          }
         }
       } catch (error) {
-        console.warn('Unable to load trash from server:', error)
+        console.error("[v0] Error loading trash from server:", error instanceof Error ? error.message : error)
       }
     }
 
@@ -1693,6 +1705,7 @@ function DashboardPageContent() {
             onCreateInvoice={handleCreateInvoice}
             currentAppCurrency={currentAppCurrency}
             user={user}
+            customers={customers}
           />
         )}
         {activeTab === "products" && (
