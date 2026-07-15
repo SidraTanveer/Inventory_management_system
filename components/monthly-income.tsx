@@ -83,6 +83,17 @@ const defaultOptions: ReportOptions = {
   },
 }
 
+const getSafeDate = (value: string | undefined | null) => {
+  if (!value) return null
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+const formatSafeDate = (value: string | undefined | null, options: Intl.DateTimeFormatOptions) => {
+  const parsed = getSafeDate(value)
+  return parsed ? parsed.toLocaleDateString("en-US", options) : "Invalid date"
+}
+
 export function MonthlyIncome({
   invoices,
   products,
@@ -135,29 +146,40 @@ export function MonthlyIncome({
     return opts
   }, [])
 
+  // Deduplicated invoice list (by id) to prevent double-counting
+  const uniqueInvoices = useMemo(() => {
+    const seen = new Map<string, Invoice>()
+    invoices.forEach((invoice) => {
+      if (invoice?.id && !seen.has(invoice.id)) {
+        seen.set(invoice.id, invoice)
+      }
+    })
+    return Array.from(seen.values())
+  }, [invoices])
+
   // Filter invoices for selected month
   const monthlyInvoices = useMemo(() => {
     const [year, month] = selectedMonth.split("-")
-    return invoices.filter((invoice) => {
+    return uniqueInvoices.filter((invoice) => {
       const invoiceDate = new Date(invoice.createdAt)
       return (
         invoiceDate.getFullYear() === Number.parseInt(year) && invoiceDate.getMonth() + 1 === Number.parseInt(month)
       )
     })
-  }, [invoices, selectedMonth])
+  }, [uniqueInvoices, selectedMonth])
 
   // Calculate monthly metrics
   const monthlyMetrics = useMemo(() => {
-    const totalRevenue = monthlyInvoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0)
-    const totalCost = monthlyInvoices.reduce((sum, invoice) => sum + invoice.totalCost, 0)
-    const totalProfit = monthlyInvoices.reduce((sum, invoice) => sum + invoice.totalProfit, 0)
+    const totalRevenue = monthlyInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalAmount) || 0), 0)
+    const totalCost = monthlyInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalCost) || 0), 0)
+    const totalProfit = monthlyInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalProfit) || 0), 0)
     const totalOrders = monthlyInvoices.length
     const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
 
     const uniqueCustomers = new Set(monthlyInvoices.map((invoice) => invoice.customerEmail)).size
 
     const totalItems = monthlyInvoices.reduce(
-      (sum, invoice) => sum + invoice.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
+      (sum, invoice) => sum + invoice.items.reduce((itemSum, item) => itemSum + (Number(item.quantity) || 0), 0),
       0,
     )
 
@@ -180,6 +202,7 @@ export function MonthlyIncome({
         }
       }
       customerRevenue[key].revenue += invoice.totalAmount
+      customerRevenue[key].revenue += Number(invoice.totalAmount) || 0
       customerRevenue[key].orders += 1
     })
 
@@ -198,8 +221,10 @@ export function MonthlyIncome({
             revenue: 0,
           }
         }
-        productSales[item.productId].quantity += item.quantity
-        productSales[item.productId].revenue += item.quantity * item.unitPrice
+        const quantity = Number(item.quantity) || 0
+        const unitPrice = Number(item.unitPrice) || 0
+        productSales[item.productId].quantity += quantity
+        productSales[item.productId].revenue += quantity * unitPrice
       })
     })
 
@@ -253,9 +278,9 @@ export function MonthlyIncome({
           }),
           category: prod?.category ?? "Unknown",
           product: item.productName,
-          quantitySold: item.quantity,
-          unitPrice: item.unitPrice,
-          totalSales: item.quantity * item.unitPrice,
+          quantitySold: Number(item.quantity) || 0,
+          unitPrice: Number(item.unitPrice) || 0,
+          totalSales: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
         })
       })
     })
@@ -269,8 +294,8 @@ export function MonthlyIncome({
   }, [monthlyInvoices, productById])
 
   const salesTotals = useMemo(() => {
-    const totalQty = salesRows.reduce((s, r) => s + r.quantitySold, 0)
-    const totalAmount = salesRows.reduce((s, r) => s + r.totalSales, 0)
+    const totalQty = salesRows.reduce((s, r) => s + (Number(r.quantitySold) || 0), 0)
+    const totalAmount = salesRows.reduce((s, r) => s + (Number(r.totalSales) || 0), 0)
     return { totalQty, totalAmount }
   }, [salesRows])
 
@@ -282,17 +307,17 @@ export function MonthlyIncome({
     const prevYear = previousDate.getFullYear()
     const prevMonth = previousDate.getMonth() + 1
 
-    const prevMonthInvoices = invoices.filter((invoice) => {
+    const prevMonthInvoices = uniqueInvoices.filter((invoice) => {
       const d = new Date(invoice.createdAt)
       return d.getFullYear() === prevYear && d.getMonth() + 1 === prevMonth
     })
 
-    const prevRevenue = prevMonthInvoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0)
-    const prevProfit = prevMonthInvoices.reduce((sum, invoice) => sum + invoice.totalProfit, 0)
+    const prevRevenue = prevMonthInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalAmount) || 0), 0)
+    const prevProfit = prevMonthInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalProfit) || 0), 0)
     const prevOrders = prevMonthInvoices.length
 
     return { prevRevenue, prevProfit, prevOrders }
-  }, [invoices, selectedMonth])
+  }, [uniqueInvoices, selectedMonth])
 
   const monthOverMonthChanges = useMemo(() => {
     const revenueChange =
@@ -1732,7 +1757,7 @@ export function MonthlyIncome({
                     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                     .map((invoice, index) => (
                       <div
-                        key={invoice.id}
+                        key={`${invoice.id || invoice.trackingId || "no-id"}-${invoice.createdAt || "no-date"}-${index}`}
                         className="p-4 rounded-lg border hover:shadow-md transition-all duration-200 hover:bg-blue-50/50"
                       >
                         <div className="flex items-center justify-between">
@@ -1763,7 +1788,7 @@ export function MonthlyIncome({
                                     <span className="text-blue-600 font-mono">{invoice.trackingId}</span>
                                   </span>
                                 )}
-                                <span>{new Date(invoice.createdAt).toLocaleDateString()}</span>
+                                <span>{formatSafeDate(invoice.createdAt, {})}</span>
                                 <span>{invoice.items.reduce((sum, item) => sum + item.quantity, 0)} items</span>
                               </div>
                             </div>
@@ -1839,18 +1864,18 @@ export function MonthlyIncome({
                 <div className="space-y-3">
                   <h4 className="font-semibold text-gray-900">Connect With Us</h4>
                   <div className="space-y-2 text-sm text-gray-600">
-                    <p className="flex items-center">
+                    <div className="flex items-center">
                       <div className="w-2 h-2 bg-pink-400 rounded-full mr-2"></div>
                       Instagram: @glow_with_vibes
-                    </p>
-                    <p className="flex items-center">
+                    </div>
+                    <div className="flex items-center">
                       <div className="w-2 h-2 bg-blue-400 rounded-full mr-2"></div>
                       LinkedIn: Noman Ali
-                    </p>
-                    <p className="flex items-center">
+                    </div>
+                    <div className="flex items-center">
                       <div className="w-2 h-2 bg-blue-600 rounded-full mr-2"></div>
                       Facebook: Glow with Vibes
-                    </p>
+                    </div>
                     <div className="flex items-center">
                       <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
                       <Phone className="h-4 w-4 mr-2" />

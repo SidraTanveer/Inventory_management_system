@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { query } from "@/lib/db"
-import { ensureAuthTables, findUserByEmail, hashPassword, saveLoginRequest, createUser } from "@/lib/auth"
+import { ensureAuthTables, findUserByEmail, hashPassword, saveLoginRequest, createSignupRequest, findPendingSignupRequestByEmail } from "@/lib/auth"
 
 export async function GET() {
   try {
@@ -31,6 +31,13 @@ export async function POST(request: Request) {
       }
       const user = await findUserByEmail(email)
       if (!user) {
+        const pendingSignup = await findPendingSignupRequestByEmail(email)
+        if (pendingSignup) {
+          return NextResponse.json(
+            { success: false, error: "Your signup request is pending admin approval. Please wait for approval." },
+            { status: 403 },
+          )
+        }
         const requestResult = await saveLoginRequest(email, name ?? email, message)
         return NextResponse.json({ success: false, request: requestResult, error: "User not found. Request created." }, { status: 404 })
       }
@@ -57,8 +64,8 @@ export async function POST(request: Request) {
       if (!name || !email || !password || !role) {
         return NextResponse.json({ success: false, error: "All registration fields are required." }, { status: 400 })
       }
-      const created = await createUser(name, email, password, role)
-      return NextResponse.json({ success: true, user: created })
+      const requestResult = await createSignupRequest(name, email, password, role)
+      return NextResponse.json({ success: true, request: requestResult, message: "Signup request submitted for admin approval." })
     }
 
     return NextResponse.json({ success: false, error: "Unsupported auth type." }, { status: 400 })

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Product } from "@/types/app"
 import { formatCurrency } from "@/lib/utils"
+import { getKeywordSuggestions, searchAndRank } from "@/lib/search-utils"
 import { Search, TrendingUp, TrendingDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -18,16 +19,20 @@ export function ProductSearch({ products, currentAppCurrency }: ProductSearchPro
   const [searchTerm, setSearchTerm] = useState("")
 
   const filteredProducts = useMemo(() => {
-    if (!searchTerm) {
-      return products
-    }
-    const lowerCaseSearchTerm = searchTerm.toLowerCase()
-    return products.filter(
-      (product) =>
-        product.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-        product.description.toLowerCase().includes(lowerCaseSearchTerm) ||
-        product.sku.toLowerCase().includes(lowerCaseSearchTerm) ||
-        product.category.toLowerCase().includes(lowerCaseSearchTerm),
+    return searchAndRank(products, searchTerm, [
+      (product) => product.name,
+      (product) => product.description,
+      (product) => product.sku,
+      (product) => product.category,
+    ])
+  }, [products, searchTerm])
+
+  const productSuggestions = useMemo(() => {
+    return getKeywordSuggestions(
+      products,
+      searchTerm,
+      [(product) => product.name, (product) => product.sku, (product) => product.category],
+      10,
     )
   }, [products, searchTerm])
 
@@ -48,8 +53,14 @@ export function ProductSearch({ products, currentAppCurrency }: ProductSearchPro
             placeholder="Search products by name, description, SKU, or category..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            list="product-search-suggestions"
             className="pl-10 border-pink-200 focus:border-pink-500 focus:ring-pink-500"
           />
+          <datalist id="product-search-suggestions">
+            {productSuggestions.map((suggestion) => (
+              <option key={suggestion} value={suggestion} />
+            ))}
+          </datalist>
         </div>
         {filteredProducts.length > 0 ? (
           <div className="overflow-x-auto">

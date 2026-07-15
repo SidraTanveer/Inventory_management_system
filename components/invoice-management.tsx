@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import { getKeywordSuggestions } from "@/lib/search-utils"
 import {
   FileText,
   Plus,
@@ -111,6 +112,20 @@ export function InvoiceManagement({
     })
   }, [invoices, searchTerm, statusFilter, dateRange, amountRange, profitRange])
 
+  const invoiceSuggestions = useMemo(() => {
+    return getKeywordSuggestions(
+      invoices,
+      searchTerm,
+      [
+        (invoice) => invoice.id,
+        (invoice) => invoice.trackingId,
+        (invoice) => invoice.customerName,
+        (invoice) => invoice.customerEmail,
+      ],
+      12,
+    )
+  }, [invoices, searchTerm])
+
   const clearFilters = () => {
     setSearchTerm("")
     setStatusFilter("all")
@@ -142,8 +157,8 @@ export function InvoiceManagement({
     }
   }
 
-  const totalRevenue = filteredInvoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0)
-  const totalProfit = filteredInvoices.reduce((sum, invoice) => sum + invoice.totalProfit, 0)
+  const totalRevenue = filteredInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalAmount) || 0), 0)
+  const totalProfit = filteredInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalProfit) || 0), 0)
   const completedInvoices = filteredInvoices.filter((inv) => inv.status === "completed").length
   const pendingInvoices = filteredInvoices.filter((inv) => inv.status === "pending").length
   const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
@@ -338,7 +353,7 @@ export function InvoiceManagement({
           <CardContent>
             <div className="text-3xl font-bold text-gray-900">{formatCurrency(totalProfit, currentAppCurrency)}</div>
             <div className="flex items-center mt-1 space-x-2">
-              <span className="text-sm text-purple-600 font-medium">{profitMargin.toFixed(1)}% margin</span>
+              <span className="text-sm text-purple-600 font-medium">{(Number(profitMargin) || 0).toFixed(1)}% margin</span>
             </div>
             <div className="mt-2">
               <div className="w-full bg-gray-200 rounded-full h-2">
@@ -386,8 +401,14 @@ export function InvoiceManagement({
                   placeholder="Search by Invoice ID, tracking ID, customer name, or email..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+                  list="invoice-search-suggestions"
                   className="pl-10 border-blue-200 focus:border-blue-500 focus:ring-blue-500"
                 />
+                <datalist id="invoice-search-suggestions">
+                  {invoiceSuggestions.map((suggestion) => (
+                    <option key={suggestion} value={suggestion} />
+                  ))}
+                </datalist>
               </div>
             </div>
             <div className="flex gap-2">
@@ -561,8 +582,11 @@ export function InvoiceManagement({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredInvoices.map((invoice) => (
-                    <tr key={invoice.id} className="border-b hover:bg-purple-50/50 transition-colors">
+                  {filteredInvoices.map((invoice, index) => (
+                    <tr
+                      key={`${invoice.id || invoice.trackingId || "no-id"}-${invoice.createdAt || "no-date"}-${index}`}
+                      className="border-b hover:bg-purple-50/50 transition-colors"
+                    >
                       <td className="p-4">
                         <div className="font-medium text-purple-700 font-mono">{invoice.id}</div>
                       </td>
@@ -595,7 +619,7 @@ export function InvoiceManagement({
                         <div className={`font-medium ${invoice.totalProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
                           {formatCurrency(invoice.totalProfit, currentAppCurrency)}
                         </div>
-                        <div className="text-sm text-gray-500">{(invoice.profitPercentage ?? 0).toFixed(1)}%</div>
+                        <div className="text-sm text-gray-500">{(Number(invoice.profitPercentage) || 0).toFixed(1)}%</div>
                       </td>
                       <td className="p-4">{getStatusBadge(invoice.status)}</td>
                       <td className="p-4">

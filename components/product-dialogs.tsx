@@ -22,7 +22,7 @@ import { Plus, Edit, Trash2, Package, DollarSign, History, Search, Download, Upl
 import { generateProductPDF, generateAllProductsPDF } from "@/components/product-pdf-generator"
 import { exportProductsToExcel, importProductsFromExcel } from "@/lib/excel-utils"
 import type { Product, PurchaseHistoryItem } from "@/types/app"
-import { formatCurrency, generateId, formatDate } from "@/lib/utils"
+import { formatCurrency, generateId, formatDate, getCurrentDate } from "@/lib/utils"
 import { savePDFToDatabase } from "@/lib/pdf-utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -103,11 +103,11 @@ export function ProductDialogs({
     try {
       setIsDownloadingPdf(true)
       const doc = await generateAllProductsPDF(products, vendors, currentAppCurrency)
-      doc.save(`all-products-inventory-${new Date().toISOString().split("T")[0]}.pdf`)
+      doc.save(`all-products-inventory-${getCurrentDate()}.pdf`)
 
       // Save to database
       await savePDFToDatabase(doc, {
-        filename: `all-products-inventory-${new Date().toISOString().split("T")[0]}.pdf`,
+        filename: `all-products-inventory-${getCurrentDate()}.pdf`,
         type: "products_export",
       })
     } catch (error) {
@@ -632,7 +632,7 @@ export function ProductDialogs({
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {viewingProduct.purchaseHistory.length > 0 ? (
+                  {viewingProduct?.purchaseHistory && viewingProduct.purchaseHistory.length > 0 ? (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -848,7 +848,7 @@ export function ProductDialogs({
                 </Button>
 
                 <h4 className="text-lg font-semibold text-gray-800 mt-6">Existing Purchase History</h4>
-                {editingProduct.purchaseHistory.length > 0 ? (
+                {editingProduct?.purchaseHistory && editingProduct.purchaseHistory.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>

@@ -2,7 +2,7 @@
 
 import { jsPDF } from "jspdf"
 import type { Customer, Invoice, Product } from "@/types/app"
-import { formatCurrency, formatDate } from "@/lib/utils"
+import { formatCurrency, formatDate, getCurrentDate } from "@/lib/utils"
 
 interface Vendor {
   id: string
@@ -31,11 +31,11 @@ export async function generateCustomersPDF(customers: Customer[], invoices: Invo
   doc.setTextColor(100, 100, 100)
   doc.text("Customer Database Report with Purchase History", pageWidth / 2, currentY, { align: "center" })
   currentY += 5
-  doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth / 2, currentY, { align: "center" })
+  doc.text(`Generated: ${formatDate(getCurrentDate())}`, pageWidth / 2, currentY, { align: "center" })
   currentY += 10
 
   // Summary
-  const totalRevenue = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
+  const totalRevenue = invoices.reduce((sum, inv) => sum + (Number(inv.totalAmount) || 0), 0)
   doc.setFont("Times", "Bold")
   doc.setFontSize(12)
   doc.setTextColor(0, 0, 0)
@@ -110,7 +110,7 @@ export async function generateCustomersPDF(customers: Customer[], invoices: Invo
         const truncatedProducts = productNames.length > 40 ? productNames.substring(0, 37) + "..." : productNames
         doc.text(truncatedProducts, 90, currentY)
 
-        const totalQty = invoice.items.reduce((sum, item) => sum + item.quantity, 0)
+        const totalQty = invoice.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
         doc.text(totalQty.toString(), 160, currentY)
         doc.text(formatCurrency(invoice.totalAmount, currency), 190, currentY)
         doc.text((invoice.status ?? "pending").toString(), 230, currentY)
@@ -118,7 +118,7 @@ export async function generateCustomersPDF(customers: Customer[], invoices: Invo
       })
 
       // Customer summary
-      const totalSpent = customerInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
+      const totalSpent = customerInvoices.reduce((sum, inv) => sum + (Number(inv.totalAmount) || 0), 0)
       doc.setFont("Times", "Bold")
       doc.setFontSize(9)
       doc.text(`Total Orders: ${customerInvoices.length}`, 15, currentY + 3)
@@ -162,7 +162,7 @@ export async function generateVendorsPDF(vendors: Vendor[], products: Product[],
   doc.setTextColor(100, 100, 100)
   doc.text("Vendor Database Report with Product Details", pageWidth / 2, currentY, { align: "center" })
   currentY += 5
-  doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth / 2, currentY, { align: "center" })
+  doc.text(`Generated: ${formatDate(getCurrentDate())}`, pageWidth / 2, currentY, { align: "center" })
   currentY += 10
 
   // Summary
@@ -233,7 +233,7 @@ export async function generateVendorsPDF(vendors: Vendor[], products: Product[],
           currentY = 15
         }
 
-        const productValue = product.unitPrice * product.stock
+        const productValue = (Number(product.unitPrice) || 0) * (Number(product.stock) || 0)
         totalValue += productValue
 
         doc.text(product.name.substring(0, 25), 15, currentY)
@@ -241,7 +241,7 @@ export async function generateVendorsPDF(vendors: Vendor[], products: Product[],
         doc.text(product.category, 120, currentY)
         doc.text(formatCurrency(product.costPrice, currency), 160, currentY)
         doc.text(formatCurrency(product.unitPrice, currency), 190, currentY)
-        doc.text(product.stock.toString(), 220, currentY)
+        doc.text((Number(product.stock) || 0).toString(), 220, currentY)
         doc.text(formatCurrency(productValue, currency), 245, currentY)
         currentY += 5
       })
@@ -290,7 +290,7 @@ export async function generateInvoicesSummaryPDF(invoices: Invoice[], currency: 
   doc.setTextColor(100, 100, 100)
   doc.text("Invoices Summary Report with Product Details", pageWidth / 2, currentY, { align: "center" })
   currentY += 5
-  doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth / 2, currentY, { align: "center" })
+  doc.text(`Generated: ${formatDate(getCurrentDate())}`, pageWidth / 2, currentY, { align: "center" })
   currentY += 10
 
   // Summary Statistics

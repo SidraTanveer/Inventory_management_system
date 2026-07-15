@@ -1,11 +1,14 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 
+export const APP_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "system"
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 export function formatCurrency(amount: number, currencyCode = "USD"): string {
+  const safeAmount = Number.isFinite(amount) ? amount : 0
   let locale = "en-US"
   if (currencyCode === "PKR") {
     locale = "en-PK" // Use Pakistani English locale for 'Rs.' symbol
@@ -13,11 +16,12 @@ export function formatCurrency(amount: number, currencyCode = "USD"): string {
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: currencyCode,
-  }).format(amount)
+  }).format(safeAmount)
 }
 
 export function formatDate(dateString: string): string {
   const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) return "Invalid date"
   return date.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -25,17 +29,29 @@ export function formatDate(dateString: string): string {
   })
 }
 
-export function getCurrentDateTime(): string {
-  const now = new Date()
-  return now.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
+export function toPakistanDateKey(dateInput: string | Date): string | null {
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput)
+  if (Number.isNaN(date.getTime())) return null
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+
+  return `${year}-${month}-${day}`
+}
+
+export function formatPakistanTime(dateInput: string | Date): string {
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput)
+  if (Number.isNaN(date.getTime())) return "Invalid date"
+  return date.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
     hour12: true,
   })
+}
+
+export function getCurrentDateTime(): string {
+  return new Date().toISOString()
 }
 
 export function getInitialCurrency(): string {
@@ -53,7 +69,7 @@ export function generateId(): string {
 }
 
 export function getCurrentDate(): string {
-  return new Date().toISOString().split("T")[0]
+  return toPakistanDateKey(new Date()) ?? "1970-01-01"
 }
 
 // New helper function to calculate days since a given date

@@ -63,8 +63,117 @@ import {
   getDaysSince,
 } from "@/lib/utils"
 import { savePDFToDatabase } from "@/lib/pdf-utils"
+import { upsertDailyOrder, deleteDailyOrder, getDailyOrders } from "@/lib/daily-orders"
 
 const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36)
+
+const toSafeNumber = (value: any, fallback = 0) => {
+  if (value === undefined || value === null || value === "") return fallback
+  if (typeof value === "string") {
+    const normalized = value.replace(/,/g, "").trim()
+    if (!normalized) return fallback
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : fallback
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const normalizeProduct = (product: Product): Product => ({
+  ...product,
+  unitPrice: toSafeNumber(product.unitPrice),
+  costPrice: toSafeNumber(product.costPrice),
+  stock: toSafeNumber(product.stock),
+  purchaseHistory: Array.isArray(product.purchaseHistory)
+    ? product.purchaseHistory.map((purchase) => ({
+        ...purchase,
+        quantity: toSafeNumber(purchase.quantity),
+        unitCost: toSafeNumber(purchase.unitCost),
+        totalCost: toSafeNumber(purchase.totalCost),
+      }))
+    : [],
+  salesHistory: Array.isArray(product.salesHistory)
+    ? product.salesHistory.map((sale) => ({
+        ...sale,
+        quantity: toSafeNumber(sale.quantity),
+        unitPrice: toSafeNumber(sale.unitPrice),
+        totalPrice: toSafeNumber(sale.totalPrice),
+        profit: toSafeNumber(sale.profit),
+      }))
+    : product.salesHistory,
+})
+
+const normalizeProducts = (items: Product[]) => items.map(normalizeProduct)
+
+const mergeInvoicesById = (primary: Invoice[], secondary: Invoice[]) => {
+  const merged = new Map<string, Invoice>()
+  ;[...primary, ...secondary].forEach((invoice) => {
+    if (invoice?.id && !merged.has(invoice.id)) merged.set(invoice.id, invoice)
+  })
+  return Array.from(merged.values())
+}
+
+const dedupeInvoices = (items: Invoice[]) => mergeInvoicesById(items, [])
+
+const getProductKey = (product: Product) => product?.id || `${product?.sku || ""}-${product?.name || ""}`
+
+const mergeProductsById = (primary: Product[], secondary: Product[]) => {
+  const merged = new Map<string, Product>()
+  ;[...primary, ...secondary].forEach((product) => {
+    const key = getProductKey(product)
+    if (key && !merged.has(key)) {
+      merged.set(key, normalizeProduct(product))
+    }
+  })
+  return Array.from(merged.values())
+}
+
+const getCustomerKey = (customer: Customer) => (customer?.email || "").trim().toLowerCase() || customer?.id
+
+const mergeCustomers = (primary: Customer[], secondary: Customer[]) => {
+  const merged = new Map<string, Customer>()
+  ;[...primary, ...secondary].forEach((customer) => {
+    const key = getCustomerKey(customer)
+    if (key && !merged.has(key)) {
+      merged.set(key, customer)
+    }
+  })
+  return Array.from(merged.values())
+}
+
+const mergeVendors = (primary: Vendor[], secondary: Vendor[]) => {
+  const merged = new Map<string, Vendor>()
+  ;[...primary, ...secondary].forEach((vendor) => {
+    const key = (vendor?.email || "").trim().toLowerCase() || vendor?.id
+    if (key && !merged.has(key)) {
+      merged.set(key, vendor)
+    }
+  })
+  return Array.from(merged.values())
+}
+
+const mergeDeals = (primary: Deal[], secondary: Deal[]) => {
+  const merged = new Map<string, Deal>()
+  ;[...primary, ...secondary].forEach((deal) => {
+    if (deal?.id && !merged.has(deal.id)) {
+      merged.set(deal.id, deal)
+    }
+  })
+  return Array.from(merged.values())
+}
+
+const getUserKey = (user: AuthUser) => (user?.email || "").trim().toLowerCase() || user?.id
+
+const mergeUsers = (primary: AuthUser[], secondary: AuthUser[]) => {
+  const merged = new Map<string, AuthUser>()
+  ;[...primary, ...secondary].forEach((u) => {
+    const key = getUserKey(u)
+    if (key && !merged.has(key)) {
+      merged.set(key, u)
+    }
+  })
+  return Array.from(merged.values())
+}
 
 // Enhanced mock data with PKR prices
 const initialMockProducts: Product[] = [
@@ -378,118 +487,118 @@ function DashboardPageContent() {
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const loaded = loadFromLocalStorage("ims_products")
-      return Array.isArray(loaded) && loaded.length > 0 ? loaded : initialMockProducts
+      return Array.isArray(loaded) && loaded.length > 0
+        ? mergeProductsById(normalizeProducts(loaded), normalizeProducts(initialMockProducts))
+        : normalizeProducts(initialMockProducts)
     } catch (err) {
       console.error("[v0] Error loading products:", err)
-      return initialMockProducts
+      return normalizeProducts(initialMockProducts)
     }
   })
 
   const [invoices, setInvoices] = useState<Invoice[]>(() => {
     try {
       const loaded = loadFromLocalStorage("ims_invoices")
-      return Array.isArray(loaded) ? loaded : mockInvoices
+      return Array.isArray(loaded) ? dedupeInvoices(loaded) : dedupeInvoices(mockInvoices)
     } catch (err) {
       console.error("[v0] Error loading invoices:", err)
-      return mockInvoices
+      return dedupeInvoices(mockInvoices)
     }
   })
 
   const [users, setUsers] = useState<AuthUser[]>(() => {
     const saved = loadFromLocalStorage("ims_users")
-    return (
-      saved || [
-        {
-          id: "user-1",
-          name: "Admin User",
-          email: "nomanandy20@gmail.com",
-          role: "admin",
-          permissions: {
-            dashboard: true,
-            products: true,
-            invoices: true,
-            reports: true,
-            settings: true,
-          },
-          createdAt: "2024-01-01",
+    const defaultUsers: AuthUser[] = [
+      {
+        id: "user-1",
+        name: "Admin User",
+        email: "nomanandy20@gmail.com",
+        role: "admin",
+        permissions: {
+          dashboard: true,
+          products: true,
+          invoices: true,
+          reports: true,
+          settings: true,
         },
-        {
-          id: "user-2",
-          name: "Sales Manager",
-          email: "sales@example.com",
-          role: "sales",
-          permissions: {
-            dashboard: true,
-            products: true,
-            invoices: true,
-            reports: false,
-            settings: false,
-          },
-          createdAt: "2024-01-05",
+        createdAt: "2024-01-01",
+      },
+      {
+        id: "user-2",
+        name: "Sales Manager",
+        email: "sales@example.com",
+        role: "sales",
+        permissions: {
+          dashboard: true,
+          products: true,
+          invoices: true,
+          reports: false,
+          settings: false,
         },
-      ]
-    )
+        createdAt: "2024-01-05",
+      },
+    ]
+    return Array.isArray(saved) ? mergeUsers(saved, defaultUsers) : defaultUsers
   })
 
   const [guestUsers, setGuestUsers] = useState<AuthUser[]>(() => {
     const saved = loadFromLocalStorage("ims_guest_users")
-    return (
-      saved || [
-        {
-          id: "guest-1",
-          name: "Temporary Viewer",
-          email: "viewer@example.com",
-          role: "guest",
-          permissions: {
-            dashboard: true,
-            products: true,
-            invoices: true,
-            reports: false,
-            settings: false,
-          },
-          createdAt: "2024-03-01",
+    const defaultGuests: AuthUser[] = [
+      {
+        id: "guest-1",
+        name: "Temporary Viewer",
+        email: "viewer@example.com",
+        role: "guest",
+        permissions: {
+          dashboard: true,
+          products: true,
+          invoices: true,
+          reports: false,
+          settings: false,
         },
-        {
-          id: "guest-2",
-          name: "John Doe",
-          email: "john.doe@example.com",
-          role: "guest",
-          permissions: {
-            dashboard: true,
-            products: true,
-            invoices: true,
-            reports: false,
-            settings: false,
-          },
-          createdAt: "2024-03-15",
+        createdAt: "2024-03-01",
+      },
+      {
+        id: "guest-2",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        role: "guest",
+        permissions: {
+          dashboard: true,
+          products: true,
+          invoices: true,
+          reports: false,
+          settings: false,
         },
-        {
-          id: "guest-3",
-          name: "Jane Smith",
-          email: "jane.smith@example.com",
-          role: "guest",
-          permissions: {
-            dashboard: true,
-            products: true,
-            invoices: true,
-            reports: false,
-            settings: false,
-          },
-          createdAt: "2024-03-20",
+        createdAt: "2024-03-15",
+      },
+      {
+        id: "guest-3",
+        name: "Jane Smith",
+        email: "jane.smith@example.com",
+        role: "guest",
+        permissions: {
+          dashboard: true,
+          products: true,
+          invoices: true,
+          reports: false,
+          settings: false,
         },
-      ]
-    )
+        createdAt: "2024-03-20",
+      },
+    ]
+    return Array.isArray(saved) ? mergeUsers(saved, defaultGuests) : defaultGuests
   })
 
   const [deals, setDeals] = useState<Deal[]>(() => {
     const saved = loadFromLocalStorage("ims_deals")
-    return saved || mockDeals
+    return Array.isArray(saved) ? mergeDeals(saved, mockDeals) : mockDeals
   })
 
   const [customers, setCustomers] = useState<Customer[]>(() => {
     try {
       const loaded = loadFromLocalStorage("ims_customers")
-      return Array.isArray(loaded) ? loaded : mockCustomers
+      return Array.isArray(loaded) ? mergeCustomers(loaded, mockCustomers) : mockCustomers
     } catch (err) {
       console.error("[v0] Error loading customers:", err)
       return mockCustomers
@@ -499,7 +608,7 @@ function DashboardPageContent() {
   const [vendors, setVendors] = useState<Vendor[]>(() => {
     try {
       const loaded = loadFromLocalStorage("ims_vendors")
-      return Array.isArray(loaded) ? loaded : mockVendors
+      return Array.isArray(loaded) ? mergeVendors(loaded, mockVendors) : mockVendors
     } catch (err) {
       console.error("[v0] Error loading vendors:", err)
       return mockVendors
@@ -585,7 +694,7 @@ function DashboardPageContent() {
         const prodRes = await fetch('/api/products')
         if (prodRes.ok) {
           const prodData = await prodRes.json()
-          if (Array.isArray(prodData)) setProducts(prodData)
+          if (Array.isArray(prodData)) setProducts((prev) => mergeProductsById(normalizeProducts(prodData), prev))
         }
       } catch (error) {
         console.warn('Unable to load products from server:', error)
@@ -596,10 +705,22 @@ function DashboardPageContent() {
         const invRes = await fetch('/api/invoices')
         if (invRes.ok) {
           const invData = await invRes.json()
-          if (Array.isArray(invData)) setInvoices(invData)
+          if (Array.isArray(invData)) setInvoices(dedupeInvoices(invData))
         }
       } catch (error) {
         console.warn('Unable to load invoices from server:', error)
+      }
+
+      try {
+        const dailyRes = await fetch('/api/daily-orders')
+        if (dailyRes.ok) {
+          const dailyData = await dailyRes.json()
+          if (Array.isArray(dailyData)) {
+            setInvoices((prev) => mergeInvoicesById(prev, dailyData))
+          }
+        }
+      } catch (error) {
+        console.warn('Unable to load daily orders from server:', error)
       }
 
       try {
@@ -607,7 +728,7 @@ function DashboardPageContent() {
         const custRes = await fetch('/api/customers')
         if (custRes.ok) {
           const custData = await custRes.json()
-          if (Array.isArray(custData)) setCustomers(custData)
+          if (Array.isArray(custData)) setCustomers((prev) => mergeCustomers(custData, prev))
         }
       } catch (error) {
         console.warn('Unable to load customers from server:', error)
@@ -618,7 +739,7 @@ function DashboardPageContent() {
         const vendRes = await fetch('/api/vendors')
         if (vendRes.ok) {
           const vendData = await vendRes.json()
-          if (Array.isArray(vendData)) setVendors(vendData)
+          if (Array.isArray(vendData)) setVendors((prev) => mergeVendors(vendData, prev))
         }
       } catch (error) {
         console.warn('Unable to load vendors from server:', error)
@@ -629,7 +750,7 @@ function DashboardPageContent() {
         const dealRes = await fetch('/api/deals')
         if (dealRes.ok) {
           const dealData = await dealRes.json()
-          if (Array.isArray(dealData)) setDeals(dealData)
+          if (Array.isArray(dealData)) setDeals((prev) => mergeDeals(dealData, prev))
         }
       } catch (error) {
         console.warn('Unable to load deals from server:', error)
@@ -732,13 +853,17 @@ function DashboardPageContent() {
   }
 
   const handleDataSync = (syncedData: any) => {
-    if (syncedData["ims_products"]) setProducts(syncedData["ims_products"])
-    if (syncedData["ims_invoices"]) setInvoices(syncedData["ims_invoices"])
-    if (syncedData["ims_users"]) setUsers(syncedData["ims_users"])
-    if (syncedData["ims_guest_users"]) setGuestUsers(syncedData["ims_guest_users"])
-    if (syncedData["ims_deals"]) setDeals(syncedData["ims_deals"])
-    if (syncedData["ims_vendors"]) setVendors(syncedData["ims_vendors"])
-    if (syncedData["ims_customers"]) setCustomers(syncedData["ims_customers"])
+    if (Array.isArray(syncedData["ims_products"])) {
+      setProducts((prev) => mergeProductsById(normalizeProducts(syncedData["ims_products"]), prev))
+    }
+    if (Array.isArray(syncedData["ims_invoices"])) setInvoices(dedupeInvoices(syncedData["ims_invoices"]))
+    if (Array.isArray(syncedData["ims_users"])) setUsers((prev) => mergeUsers(syncedData["ims_users"], prev))
+    if (Array.isArray(syncedData["ims_guest_users"])) setGuestUsers((prev) => mergeUsers(syncedData["ims_guest_users"], prev))
+    if (Array.isArray(syncedData["ims_deals"])) setDeals((prev) => mergeDeals(syncedData["ims_deals"], prev))
+    if (Array.isArray(syncedData["ims_vendors"])) setVendors((prev) => mergeVendors(syncedData["ims_vendors"], prev))
+    if (Array.isArray(syncedData["ims_customers"])) {
+      setCustomers((prev) => mergeCustomers(syncedData["ims_customers"], prev))
+    }
     if (syncedData["ims_trash"]) setTrashItems(syncedData["ims_trash"])
   }
 
@@ -783,15 +908,15 @@ function DashboardPageContent() {
     }
 
     if (itemToRecover.type === "product") {
-      setProducts((prev) => [...prev, itemToRecover.data as Product])
+      setProducts((prev) => mergeProductsById([itemToRecover.data as Product], prev))
     } else if (itemToRecover.type === "invoice") {
-      setInvoices((prev) => [...prev, itemToRecover.data as Invoice])
+      setInvoices((prev) => mergeInvoicesById([itemToRecover.data as Invoice], prev))
     } else if (itemToRecover.type === "deal") {
-      setDeals((prev) => [...prev, itemToRecover.data as Deal])
+      setDeals((prev) => mergeDeals([itemToRecover.data as Deal], prev))
     } else if (itemToRecover.type === "vendor") {
-      setVendors((prev) => [...prev, itemToRecover.data as Vendor])
+      setVendors((prev) => mergeVendors([itemToRecover.data as Vendor], prev))
     } else if (itemToRecover.type === "customer") {
-      setCustomers((prev) => [...prev, itemToRecover.data as Customer])
+      setCustomers((prev) => mergeCustomers([itemToRecover.data as Customer], prev))
     }
 
     setTrashItems((prev) => prev.filter((t) => t.id !== trashItemId))
@@ -826,16 +951,31 @@ function DashboardPageContent() {
   const handleAddProduct = (newProduct: Product) => {
     const create = async () => {
       try {
-        const res = await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newProduct) })
+        const productPayload = {
+          id: newProduct.id,
+          name: newProduct.name,
+          description: newProduct.description,
+          unitPrice: Number(newProduct.unitPrice) || 0,
+          costPrice: Number(newProduct.costPrice) || 0,
+          stock: Number(newProduct.stock) || 0,
+          vendorId: newProduct.vendorId,
+          category: newProduct.category,
+          sku: newProduct.sku,
+        }
+        const res = await fetch('/api/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productPayload),
+        })
         const json = await res.json()
         if (json.success && json.product) {
-          setProducts((prev) => [json.product, ...prev])
+          setProducts((prev) => mergeProductsById([normalizeProduct(json.product)], prev))
         } else {
           // fallback to local
-          setProducts((prev) => [newProduct, ...prev])
+          setProducts((prev) => mergeProductsById([normalizeProduct(newProduct)], prev))
         }
       } catch (e) {
-        setProducts((prev) => [newProduct, ...prev])
+        setProducts((prev) => mergeProductsById([normalizeProduct(newProduct)], prev))
       }
     }
     create()
@@ -848,15 +988,30 @@ function DashboardPageContent() {
   const handleUpdateProduct = (updatedProduct: Product) => {
     const update = async () => {
       try {
-        const res = await fetch('/api/products', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedProduct) })
+        const productPayload = {
+          id: updatedProduct.id,
+          name: updatedProduct.name,
+          description: updatedProduct.description,
+          unitPrice: Number(updatedProduct.unitPrice) || 0,
+          costPrice: Number(updatedProduct.costPrice) || 0,
+          stock: Number(updatedProduct.stock) || 0,
+          vendorId: updatedProduct.vendorId,
+          category: updatedProduct.category,
+          sku: updatedProduct.sku,
+        }
+        const res = await fetch('/api/products', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productPayload),
+        })
         const json = await res.json()
         if (json.success && json.product) {
-          setProducts((prev) => prev.map((p) => (p.id === json.product.id ? json.product : p)))
+          setProducts((prev) => mergeProductsById([normalizeProduct(json.product)], prev.filter((p) => p.id !== json.product.id)))
         } else {
-          setProducts((prev) => prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)))
+          setProducts((prev) => mergeProductsById([normalizeProduct(updatedProduct)], prev.filter((p) => p.id !== updatedProduct.id)))
         }
       } catch (e) {
-        setProducts((prev) => prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)))
+        setProducts((prev) => mergeProductsById([normalizeProduct(updatedProduct)], prev.filter((p) => p.id !== updatedProduct.id)))
       }
     }
     update()
@@ -925,6 +1080,7 @@ function DashboardPageContent() {
         customer_name: newInvoice.customerName,
         customer_email: newInvoice.customerEmail,
         customer_phone: newInvoice.customerPhone,
+        created_at: newInvoice.createdAt,
         total_amount: newInvoice.totalAmount,
         total_cost: newInvoice.totalCost,
         total_profit: newInvoice.totalProfit,
@@ -937,7 +1093,12 @@ function DashboardPageContent() {
         const res = await fetch('/api/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
         const json = await res.json()
         if (json.success && json.invoice) {
-          setInvoices((prev) => [json.invoice, ...prev])
+          setInvoices((prev) => mergeInvoicesById([json.invoice], prev))
+          await fetch('/api/daily-orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ invoice: json.invoice }),
+          })
           toast({ title: 'Invoice Created', description: `Invoice ${invoiceId} has been created successfully for ${invoiceMonth}/${invoiceYear}!` })
           return
         }
@@ -951,30 +1112,51 @@ function DashboardPageContent() {
         id: invoiceId,
         createdAt: invoiceDateString,
       }
-      setInvoices((prev) => [completeInvoice, ...prev])
+      setInvoices((prev) => mergeInvoicesById([completeInvoice], prev))
+      await fetch('/api/daily-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice: completeInvoice }),
+      })
       toast({ title: 'Invoice Created (local)', description: `Invoice ${invoiceId} saved locally.` })
     }
 
     create()
   }
 
-  const handleUpdateInvoice = (updatedInvoice: Invoice) => {
+  const handleUpdateInvoice = (updatedInvoice: Invoice, saveToDb = true) => {
     const update = async () => {
-      try {
-        const res = await fetch('/api/invoices', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedInvoice) })
-        const json = await res.json()
-        if (json.success && json.invoice) {
-          setInvoices((prev) => prev.map((inv) => (inv.id === updatedInvoice.id ? json.invoice : inv)))
-          setEditingInvoice(null)
-          toast({ title: 'Invoice Updated', description: `Invoice ${updatedInvoice.id} has been updated successfully.` })
-          return
+      if (saveToDb) {
+        try {
+          const res = await fetch('/api/invoices', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedInvoice) })
+          const json = await res.json()
+          if (json.success && json.invoice) {
+            setInvoices((prev) => prev.map((inv) => (inv.id === updatedInvoice.id ? json.invoice : inv)))
+            await fetch('/api/daily-orders', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ invoice: json.invoice }),
+            })
+            setEditingInvoice(null)
+            toast({ title: 'Invoice Updated & Saved', description: `Invoice ${updatedInvoice.id} has been updated and saved to the database.` })
+            return
+          }
+        } catch (e) {
+          console.error('Invoice update failed, falling back to local state', e)
         }
-      } catch (e) {
-        console.error('Invoice update failed, falling back to local state', e)
       }
       setInvoices((prev) => prev.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv)))
+      if (saveToDb) {
+        await fetch('/api/daily-orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoice: updatedInvoice }),
+        })
+        toast({ title: 'Invoice Updated (local fallback)', description: `Invoice ${updatedInvoice.id} updated locally — DB save failed.` })
+      } else {
+        toast({ title: 'Invoice Updated Locally', description: `Invoice ${updatedInvoice.id} updated in local state only.` })
+      }
       setEditingInvoice(null)
-      toast({ title: 'Invoice Updated (local)', description: `Invoice ${updatedInvoice.id} updated locally.` })
     }
 
     update()
@@ -986,6 +1168,7 @@ function DashboardPageContent() {
       const remove = async () => {
         try {
           await fetch(`/api/invoices?id=${invoiceId}`, { method: 'DELETE' })
+          await fetch(`/api/daily-orders?invoiceId=${invoiceId}`, { method: 'DELETE' })
         } catch (e) {
           // ignore
         }
@@ -996,8 +1179,7 @@ function DashboardPageContent() {
   }
 
   const handleAddInvoices = (newInvoices: Invoice[]) => {
-    const updatedInvoices = [...newInvoices, ...invoices]
-    setInvoices(updatedInvoices)
+    setInvoices((prev) => mergeInvoicesById(newInvoices, prev))
     toast({
       title: "Invoices Imported",
       description: `Successfully imported ${newInvoices.length} invoices from Excel.`,
@@ -1196,13 +1378,13 @@ function DashboardPageContent() {
         const res = await fetch('/api/deals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newDeal) })
         const json = await res.json()
         if (json.success && json.deal) {
-          setDeals((prev) => [json.deal, ...prev])
+          setDeals((prev) => mergeDeals([json.deal], prev))
           return
         }
       } catch (e) {
         // fallback to local
       }
-      setDeals((prev) => [...prev, { ...newDeal, createdAt: getCurrentDate() }])
+      setDeals((prev) => mergeDeals([{ ...newDeal, createdAt: getCurrentDate() }], prev))
     }
     create()
     toast({
@@ -1217,13 +1399,13 @@ function DashboardPageContent() {
         const res = await fetch('/api/deals', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedDeal) })
         const json = await res.json()
         if (json.success && json.deal) {
-          setDeals((prev) => prev.map((d) => (d.id === json.deal.id ? json.deal : d)))
+          setDeals((prev) => mergeDeals([json.deal], prev.filter((d) => d.id !== json.deal.id)))
           return
         }
       } catch (e) {
         // fallback
       }
-      setDeals((prev) => prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d)))
+      setDeals((prev) => mergeDeals([updatedDeal], prev.filter((d) => d.id !== updatedDeal.id)))
     }
     update()
     toast({
@@ -1367,13 +1549,13 @@ function DashboardPageContent() {
         const res = await fetch('/api/vendors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newVendor) })
         const json = await res.json()
         if (json.success && json.vendor) {
-          setVendors((prev) => [json.vendor, ...prev])
+          setVendors((prev) => mergeVendors([json.vendor], prev))
           return
         }
       } catch (e) {
         // fallback
       }
-      setVendors((prev) => [newVendor, ...prev])
+      setVendors((prev) => mergeVendors([newVendor], prev))
     }
     create()
   }
@@ -1384,13 +1566,13 @@ function DashboardPageContent() {
         const res = await fetch('/api/vendors', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedVendor) })
         const json = await res.json()
         if (json.success && json.vendor) {
-          setVendors((prev) => prev.map((v) => (v.id === json.vendor.id ? json.vendor : v)))
+          setVendors((prev) => mergeVendors([json.vendor], prev.filter((v) => v.id !== json.vendor.id)))
           return
         }
       } catch (e) {
         // fallback
       }
-      setVendors((prev) => prev.map((v) => (v.id === updatedVendor.id ? updatedVendor : v)))
+      setVendors((prev) => mergeVendors([updatedVendor], prev.filter((v) => v.id !== updatedVendor.id)))
     }
     update()
   }
@@ -1416,13 +1598,13 @@ function DashboardPageContent() {
         const res = await fetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCustomer) })
         const json = await res.json()
         if (json.success && json.customer) {
-          setCustomers((prev) => [json.customer, ...prev])
+          setCustomers((prev) => mergeCustomers([json.customer], prev))
           return
         }
       } catch (e) {
         // fallback
       }
-      setCustomers((prev) => [newCustomer, ...prev])
+      setCustomers((prev) => mergeCustomers([newCustomer], prev))
     }
     create()
   }
@@ -1433,13 +1615,13 @@ function DashboardPageContent() {
         const res = await fetch('/api/customers', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedCustomer) })
         const json = await res.json()
         if (json.success && json.customer) {
-          setCustomers((prev) => prev.map((c) => (c.id === json.customer.id ? json.customer : c)))
+          setCustomers((prev) => mergeCustomers([json.customer], prev.filter((c) => c.id !== json.customer.id)))
           return
         }
       } catch (e) {
         // fallback
       }
-      setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)))
+      setCustomers((prev) => mergeCustomers([updatedCustomer], prev.filter((c) => c.id !== updatedCustomer.id)))
     }
     update()
   }
@@ -1490,7 +1672,7 @@ function DashboardPageContent() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <aside className="w-72 border-r border-slate-200/80 bg-white/90 p-6 shadow-2xl shadow-violet-500/10 backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/95">
+      <aside className="w-72 h-full flex flex-col border-r border-slate-200/80 bg-white/90 p-6 shadow-2xl shadow-violet-500/10 backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/95">
         <div className="mb-6">
           <div className="text-3xl font-black tracking-tight bg-gradient-to-r from-fuchsia-600 via-purple-600 to-sky-500 bg-clip-text text-transparent">
             Glow With Vibes
@@ -1510,7 +1692,7 @@ function DashboardPageContent() {
           </kbd>
         </Button>
         <ThemeToggle />
-        <nav className="space-y-2">
+        <nav className="mt-4 flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
           <Button
             variant={activeTab === "dashboard" ? "secondary" : "ghost"}
             className={cn(
@@ -1684,6 +1866,7 @@ function DashboardPageContent() {
           <DailyOrders
             invoices={invoices}
             products={products}
+            customers={customers}
             onViewInvoice={handleViewInvoice}
             onEditInvoice={handleEditInvoice}
             onDeleteInvoice={handleDeleteInvoice}
@@ -1747,7 +1930,7 @@ function DashboardPageContent() {
           <div className="space-y-4">
             <div className="rounded-xl border bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Login Requests</h2>
-              <p className="mt-2 text-sm text-slate-600">Review failed login attempts and approve or reject them manually.</p>
+              <p className="mt-2 text-sm text-slate-600">Review pending login and signup requests, then approve or reject manually.</p>
             </div>
             {loginRequests.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-600">
@@ -1798,12 +1981,11 @@ function DashboardPageContent() {
           <UserManagement
             users={users}
             onAddUser={(user) => {
-              const updatedUsers = [...users, { ...user, createdAt: getCurrentDate() }]
-              setUsers(updatedUsers)
+              setUsers((prev) => mergeUsers([{ ...user, createdAt: getCurrentDate() }], prev))
             }}
-            onUpdateUser={(user) => setUsers(users.map((u) => (u.id === user.id ? user : u)))}
+            onUpdateUser={(user) => setUsers((prev) => mergeUsers([user], prev.filter((u) => u.id !== user.id)))}
             onDeleteUser={(id) => {
-              setUsers(users.filter((u) => u.id !== id))
+              setUsers((prev) => prev.filter((u) => u.id !== id))
               toast({ title: "User Deleted", description: "User has been permanently removed." })
             }}
           />
@@ -1812,12 +1994,11 @@ function DashboardPageContent() {
           <GuestManagement
             guestUsers={guestUsers}
             onAddGuest={(guest) => {
-              const updatedGuests = [...guestUsers, { ...guest, createdAt: getCurrentDate() }]
-              setGuestUsers(updatedGuests)
+              setGuestUsers((prev) => mergeUsers([{ ...guest, createdAt: getCurrentDate() }], prev))
             }}
-            onUpdateGuest={(guest) => setGuestUsers(guestUsers.map((g) => (g.id === guest.id ? guest : g)))}
+            onUpdateGuest={(guest) => setGuestUsers((prev) => mergeUsers([guest], prev.filter((g) => g.id !== guest.id)))}
             onDeleteGuest={(id) => {
-              setGuestUsers(guestUsers.filter((g) => g.id !== id))
+              setGuestUsers((prev) => prev.filter((g) => g.id !== id))
               toast({ title: "Guest Deleted", description: "Guest has been permanently removed." })
             }}
           />
@@ -1871,7 +2052,7 @@ function DashboardPageContent() {
                 toast({ title: "Products Imported", description: `${products.length} products added from PDF.` })
               }}
               onInvoicesExtracted={(invoices) => {
-                setInvoices((prev) => [...prev, ...invoices])
+                setInvoices((prev) => mergeInvoicesById(invoices, prev))
                 toast({ title: "Invoices Imported", description: `${invoices.length} invoices added from PDF.` })
               }}
               onVendorsExtracted={(vendors) => {

@@ -18,7 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Trash2, Edit, Plus, UserCheck, Users, Shield, Settings } from "lucide-react"
 import type { User } from "@/types/auth"
-import { generateId } from "@/lib/utils"
+import { generateId, getCurrentDate } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth" // Import useAuth
 
 interface UserManagementProps {
@@ -65,7 +65,7 @@ export function UserManagement({ users, onAddUser, onUpdateUser, onDeleteUser }:
     const newUser: User = {
       id: generateId(),
       ...formData,
-      createdAt: new Date().toISOString().split("T")[0],
+      createdAt: getCurrentDate(),
     }
     onAddUser(newUser)
     setIsAddDialogOpen(false)

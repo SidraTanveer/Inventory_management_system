@@ -1,15 +1,16 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useState, useEffect, useMemo } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { formatCurrency } from "@/lib/utils"
-import { Plus, Minus, Search, X, Hash, RefreshCw, User, Calendar } from "lucide-react"
+import { formatCurrency, getCurrentDate } from "@/lib/utils"
+import { buildSearchableCustomers, getKeywordSuggestions, searchAndRank } from "@/lib/search-utils"
+import { Plus, Minus, Search, X, Hash, RefreshCw, User, Calendar, Database, HardDrive } from "lucide-react"
 import type { Product, Invoice, InvoiceItem, Customer } from "@/types/app"
 
 interface InvoiceEditDialogProps {
@@ -19,9 +20,41 @@ interface InvoiceEditDialogProps {
   existingInvoices: Invoice[]
   isOpen: boolean
   onClose: () => void
-  onSave: (invoice: Invoice) => void
+  onSave: (invoice: Invoice, saveToDb: boolean) => void
   currentAppCurrency: string
   user: any
+}
+
+const composeInvoiceDateTime = (date: string, time: string) => {
+  if (!date) return ""
+  if (!time) return date
+  return `${date}T${time}:00`
+}
+
+const getDatePart = (value: string) => {
+  if (!value) return getCurrentDate()
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
+    return value.slice(0, 10)
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return getCurrentDate()
+  const year = parsed.getFullYear()
+  const month = String(parsed.getMonth() + 1).padStart(2, "0")
+  const day = String(parsed.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+const getTimePart = (value: string) => {
+  if (!value) return ""
+  const tIndex = value.indexOf("T")
+  if (tIndex >= 0 && value.length >= tIndex + 6) {
+    return value.slice(tIndex + 1, tIndex + 6)
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ""
+  const hours = String(parsed.getHours()).padStart(2, "0")
+  const minutes = String(parsed.getMinutes()).padStart(2, "0")
+  return `${hours}:${minutes}`
 }
 
 export function InvoiceEditDialog({
@@ -42,22 +75,42 @@ export function InvoiceEditDialog({
   const [trackingId, setTrackingId] = useState(invoice.trackingId || "")
   const [status, setStatus] = useState<Invoice["status"]>(invoice.status)
   const [items, setItems] = useState<InvoiceItem[]>(invoice.items)
-  const [searchTerm, setSearchTerm] = useState("")
+  const [productSearchTerm, setProductSearchTerm] = useState("")
+  const [customerSearchTerm, setCustomerSearchTerm] = useState("")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [showCustomerSearch, setShowCustomerSearch] = useState(false)
-  const [invoiceDate, setInvoiceDate] = useState(invoice.createdAt)
+  const [invoiceDate, setInvoiceDate] = useState(getDatePart(invoice.createdAt))
+  const [invoiceTime, setInvoiceTime] = useState(getTimePart(invoice.createdAt))
+  const [showDbConfirm, setShowDbConfirm] = useState(false)
+  const [pendingInvoice, setPendingInvoice] = useState<Invoice | null>(null)
 
-  const filteredProducts = products.filter(
-    (product) =>
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  const searchableCustomers = useMemo(() => {
+    return buildSearchableCustomers(customers, existingInvoices)
+  }, [customers, existingInvoices])
 
-  const filteredCustomers = customers.filter(
-    (customer) =>
-      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  const filteredProducts = searchAndRank(products, productSearchTerm, [
+    (product) => product.name,
+    (product) => product.sku,
+  ])
+
+  const filteredCustomers = searchAndRank(searchableCustomers, customerSearchTerm, [
+    (customer) => customer.name,
+    (customer) => customer.email,
+    (customer) => customer.phone,
+  ])
+
+  const customerSuggestions = useMemo(() => {
+    return getKeywordSuggestions(
+      searchableCustomers,
+      customerSearchTerm,
+      [(customer) => customer.name, (customer) => customer.email, (customer) => customer.phone],
+      10,
+    )
+  }, [searchableCustomers, customerSearchTerm])
+
+  const productSuggestions = useMemo(() => {
+    return getKeywordSuggestions(products, productSearchTerm, [(product) => product.name, (product) => product.sku], 10)
+  }, [products, productSearchTerm])
 
   const generateTrackingId = () => {
     const prefix = "TRK"
@@ -92,7 +145,7 @@ export function InvoiceEditDialog({
         },
       ])
     }
-    setSearchTerm("")
+    setProductSearchTerm("")
   }
 
   const updateItemQuantity = (productId: string, quantity: number) => {
@@ -117,7 +170,7 @@ export function InvoiceEditDialog({
     setCustomerEmail(customer.email)
     setCustomerPhone(customer.phone)
     setShowCustomerSearch(false)
-    setSearchTerm("")
+    setCustomerSearchTerm("")
   }
 
   const clearCustomer = () => {
@@ -163,10 +216,18 @@ export function InvoiceEditDialog({
       totalCost,
       totalProfit,
       profitPercentage,
-      createdAt: invoiceDate,
+      createdAt: composeInvoiceDateTime(invoiceDate, invoiceTime),
     }
 
-    onSave(updatedInvoice)
+    setPendingInvoice(updatedInvoice)
+    setShowDbConfirm(true)
+  }
+
+  const handleConfirmSave = (saveToDb: boolean) => {
+    if (!pendingInvoice) return
+    setShowDbConfirm(false)
+    onSave(pendingInvoice, saveToDb)
+    setPendingInvoice(null)
   }
 
   const handleClose = () => {
@@ -176,10 +237,14 @@ export function InvoiceEditDialog({
     setTrackingId(invoice.trackingId || "")
     setStatus(invoice.status)
     setItems(invoice.items)
-    setSearchTerm("")
+    setProductSearchTerm("")
+    setCustomerSearchTerm("")
     setSelectedCustomer(null)
     setShowCustomerSearch(false)
-    setInvoiceDate(invoice.createdAt)
+    setInvoiceDate(getDatePart(invoice.createdAt))
+    setInvoiceTime(getTimePart(invoice.createdAt))
+    setShowDbConfirm(false)
+    setPendingInvoice(null)
     onClose()
   }
 
@@ -191,15 +256,16 @@ export function InvoiceEditDialog({
       setTrackingId(invoice.trackingId || "")
       setStatus(invoice.status)
       setItems(invoice.items)
-      setInvoiceDate(invoice.createdAt)
+      setInvoiceDate(getDatePart(invoice.createdAt))
+      setInvoiceTime(getTimePart(invoice.createdAt))
 
       // Find matching customer
-      const matchingCustomer = customers.find((c) => c.email === invoice.customerEmail)
+      const matchingCustomer = searchableCustomers.find((c) => c.email === invoice.customerEmail)
       if (matchingCustomer) {
         setSelectedCustomer(matchingCustomer)
       }
     }
-  }, [isOpen, invoice, customers])
+  }, [isOpen, invoice, searchableCustomers])
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -248,10 +314,16 @@ export function InvoiceEditDialog({
                 <div className="border-2 border-orange-200 rounded-lg p-4 bg-orange-50">
                   <Input
                     placeholder="Search customers by name or email..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    value={customerSearchTerm}
+                    onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                    list="invoice-edit-customer-suggestions"
                     className="mb-3 bg-white"
                   />
+                  <datalist id="invoice-edit-customer-suggestions">
+                    {customerSuggestions.map((suggestion) => (
+                      <option key={suggestion} value={suggestion} />
+                    ))}
+                  </datalist>
                   <div className="max-h-40 overflow-y-auto space-y-2">
                     {filteredCustomers.map((customer) => (
                       <div
@@ -264,7 +336,7 @@ export function InvoiceEditDialog({
                         <div className="text-sm text-gray-500">{customer.phone}</div>
                       </div>
                     ))}
-                    {filteredCustomers.length === 0 && searchTerm && (
+                    {filteredCustomers.length === 0 && customerSearchTerm && (
                       <div className="text-center text-gray-500 py-4">No customers found</div>
                     )}
                   </div>
@@ -329,13 +401,27 @@ export function InvoiceEditDialog({
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setInvoiceDate(new Date().toISOString().split("T")[0])}
+                      onClick={() => setInvoiceDate(getCurrentDate())}
                       className="bg-white hover:bg-orange-50 text-gray-900"
                       title="Set to today"
                     >
                       Today
                     </Button>
                   </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="invoiceTime" className="flex items-center text-gray-900 font-semibold">
+                    <Calendar className="mr-2 h-4 w-4 text-orange-600" />
+                    Invoice Time
+                  </Label>
+                  <Input
+                    id="invoiceTime"
+                    type="time"
+                    value={invoiceTime}
+                    onChange={(e) => setInvoiceTime(e.target.value)}
+                    className="bg-white border-2 border-orange-300 focus:border-orange-500"
+                  />
                 </div>
 
                 {/* Tracking ID Section */}
@@ -395,11 +481,17 @@ export function InvoiceEditDialog({
               <div className="space-y-4">
                 <Input
                   placeholder="Search products by name or SKU..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={productSearchTerm}
+                  onChange={(e) => setProductSearchTerm(e.target.value)}
+                  list="invoice-edit-product-suggestions"
                   className="bg-white border-2 border-gray-300 focus:border-blue-500"
                 />
-                {searchTerm && (
+                <datalist id="invoice-edit-product-suggestions">
+                  {productSuggestions.map((suggestion) => (
+                    <option key={suggestion} value={suggestion} />
+                  ))}
+                </datalist>
+                {productSearchTerm && (
                   <div className="max-h-40 overflow-y-auto border-2 border-blue-200 rounded-lg bg-white">
                     {filteredProducts.map((product) => (
                       <div
@@ -550,6 +642,43 @@ export function InvoiceEditDialog({
           </div>
         </div>
       </DialogContent>
+
+      {/* DB Save Confirmation Dialog */}
+      <Dialog open={showDbConfirm} onOpenChange={(open) => { if (!open) { setShowDbConfirm(false); setPendingInvoice(null) } }}>
+        <DialogContent className="sm:max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold text-gray-900">
+              <Database className="h-5 w-5 text-orange-600" />
+              Save to Database?
+            </DialogTitle>
+            <DialogDescription className="text-slate-600 mt-2">
+              Do you want to save the updated invoice{" "}
+              <span className="font-semibold text-orange-700">{pendingInvoice?.id}</span> to your database?
+              <br />
+              <span className="text-sm text-slate-500 mt-1 block">
+                Saving to database will replace the old version permanently.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => handleConfirmSave(false)}
+              className="flex items-center gap-2 border-slate-300 text-slate-700 hover:bg-slate-50"
+            >
+              <HardDrive className="h-4 w-4" />
+              Save Locally Only
+            </Button>
+            <Button
+              onClick={() => handleConfirmSave(true)}
+              className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              <Database className="h-4 w-4" />
+              Yes, Save to Database
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }

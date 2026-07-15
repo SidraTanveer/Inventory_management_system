@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Upload, FileText, CheckCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { Product, Invoice, Customer } from "@/types/app"
+import { getCurrentDate } from "@/lib/utils"
 
 interface Vendor {
   id: string
@@ -169,7 +170,7 @@ export function PDFUploadParser({
           email: parts[1],
           phone: parts[2],
           address: parts[3],
-          createdAt: new Date().toISOString().split("T")[0],
+          createdAt: getCurrentDate(),
         })
       }
     })
@@ -190,7 +191,7 @@ export function PDFUploadParser({
           email: parts[1],
           phone: parts[2],
           type: parts[3] as "frequent" | "new",
-          createdAt: new Date().toISOString().split("T")[0],
+          createdAt: getCurrentDate(),
         })
       }
     })

@@ -35,6 +35,6 @@ export interface AuthContextType {
   changePassword: (userId: string, currentPassword: string, newPassword: string) => Promise<boolean> // Added changePassword
   loginRequests: LoginRequest[]
   addLoginRequest: (email: string, name: string, message?: string) => void
-  approveLoginRequest: (requestId: string) => void
-  rejectLoginRequest: (requestId: string) => void
+  approveLoginRequest: (requestId: string) => Promise<void>
+  rejectLoginRequest: (requestId: string) => Promise<void>
 }

@@ -17,7 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Trash2, Edit, Plus, UserPlus, Eye, Settings } from "lucide-react"
 import type { User } from "@/types/auth"
-import { generateId } from "@/lib/utils"
+import { generateId, getCurrentDate } from "@/lib/utils"
 
 interface GuestManagementProps {
   guestUsers: User[]
@@ -61,7 +61,7 @@ export function GuestManagement({ guestUsers, onAddGuest, onUpdateGuest, onDelet
       id: generateId(),
       ...formData,
       role: "guest",
-      createdAt: new Date().toISOString().split("T")[0],
+      createdAt: getCurrentDate(),
     }
     onAddGuest(newGuest)
     setIsAddDialogOpen(false)

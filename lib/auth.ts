@@ -49,9 +49,16 @@ export async function ensureAuthTables() {
       name TEXT NOT NULL,
       attempted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       status TEXT NOT NULL,
-      message TEXT
+      message TEXT,
+      role TEXT,
+      password_hash TEXT,
+      request_type TEXT DEFAULT 'login'
     )
   `)
+
+  await query(`ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS role TEXT`)
+  await query(`ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS password_hash TEXT`)
+  await query(`ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS request_type TEXT DEFAULT 'login'`)
 
   await query(
     `INSERT INTO users (id, name, email, password_hash, role, permissions)
@@ -154,27 +161,140 @@ export async function createUser(name: string, email: string, password: string, 
 export async function saveLoginRequest(email: string, name: string, message?: string) {
   const id = randomUUID()
   const result = await query(
-    `INSERT INTO login_requests (id, email, name, status, message)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, email, name, attempted_at, status, message`,
-    [id, email, name, "pending", message ?? null],
+    `INSERT INTO login_requests (id, email, name, status, message, request_type)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, email, name, attempted_at, status, message, role, request_type`,
+    [id, email, name, "pending", message ?? null, "login"],
   )
-  return result.rows[0] as LoginRequest
+  const row = result.rows[0]
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    attemptedAt: row.attempted_at instanceof Date ? row.attempted_at.toISOString() : row.attempted_at,
+    status: row.status,
+    message: row.message ?? undefined,
+  } as LoginRequest
+}
+
+export async function createSignupRequest(name: string, email: string, password: string, role: UserRole) {
+  const existingUser = await query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email])
+  if (existingUser.rows.length > 0) {
+    throw new Error("A user with this email already exists.")
+  }
+
+  const existingPending = await query(
+    "SELECT id FROM login_requests WHERE LOWER(email) = LOWER($1) AND status = 'pending' AND request_type = 'signup'",
+    [email],
+  )
+  if (existingPending.rows.length > 0) {
+    throw new Error("Your signup request is already pending admin approval.")
+  }
+
+  const id = randomUUID()
+  const result = await query(
+    `INSERT INTO login_requests (id, email, name, status, message, role, password_hash, request_type)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id, email, name, attempted_at, status, message, role, request_type`,
+    [
+      id,
+      email,
+      name,
+      "pending",
+      "Signup request awaiting admin approval.",
+      role,
+      hashPassword(password),
+      "signup",
+    ],
+  )
+
+  const row = result.rows[0]
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    attemptedAt: row.attempted_at instanceof Date ? row.attempted_at.toISOString() : row.attempted_at,
+    status: row.status,
+    message: row.message ?? undefined,
+  } as LoginRequest
+}
+
+export async function findPendingSignupRequestByEmail(email: string) {
+  const result = await query(
+    "SELECT id FROM login_requests WHERE LOWER(email) = LOWER($1) AND status = 'pending' AND request_type = 'signup' ORDER BY attempted_at DESC LIMIT 1",
+    [email],
+  )
+  return result.rows[0] ?? null
 }
 
 export async function getLoginRequests() {
   const result = await query(
-    "SELECT id, email, name, attempted_at, status, message FROM login_requests ORDER BY attempted_at DESC",
+    "SELECT id, email, name, attempted_at, status, message, role, request_type FROM login_requests ORDER BY attempted_at DESC",
   )
-  return result.rows as LoginRequest[]
+  return result.rows.map((row: any) => ({
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    attemptedAt: row.attempted_at instanceof Date ? row.attempted_at.toISOString() : row.attempted_at,
+    status: row.status,
+    message: row.message ?? undefined,
+  })) as LoginRequest[]
 }
 
 export async function updateLoginRequestStatus(id: string, status: "approved" | "rejected") {
   const result = await query(
-    "UPDATE login_requests SET status = $1 WHERE id = $2 RETURNING id, email, name, attempted_at, status, message",
+    "UPDATE login_requests SET status = $1 WHERE id = $2 RETURNING id, email, name, attempted_at, status, message, role, request_type",
     [status, id],
   )
-  return result.rows[0] as LoginRequest | null
+  const row = result.rows[0]
+  if (!row) return null
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    attemptedAt: row.attempted_at instanceof Date ? row.attempted_at.toISOString() : row.attempted_at,
+    status: row.status,
+    message: row.message ?? undefined,
+  } as LoginRequest
+}
+
+export async function approveSignupRequest(id: string) {
+  const requestResult = await query(
+    "SELECT id, email, name, role, password_hash, status, request_type FROM login_requests WHERE id = $1",
+    [id],
+  )
+  const request = requestResult.rows[0]
+  if (!request) {
+    throw new Error("Login request not found.")
+  }
+  if (request.status !== "pending") {
+    throw new Error("Only pending requests can be approved.")
+  }
+
+  if (request.request_type === "signup") {
+    if (!request.password_hash) {
+      throw new Error("Signup request is missing credentials.")
+    }
+
+    const existingUser = await query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [request.email])
+    if (existingUser.rows.length === 0) {
+      const role = (request.role as UserRole) || "sales"
+      await query(
+        `INSERT INTO users (id, name, email, password_hash, role, permissions)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          randomUUID(),
+          request.name,
+          request.email,
+          request.password_hash,
+          role,
+          JSON.stringify(getPermissionsByRole(role)),
+        ],
+      )
+    }
+  }
+
+  return updateLoginRequestStatus(id, "approved")
 }
 
 export async function changeUserPassword(userId: string, currentPassword: string, newPassword: string) {

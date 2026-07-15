@@ -51,8 +51,8 @@ export function CustomerProfitDetails({
     } = {}
 
     customerInvoices.forEach((invoice) => {
-      totalCustomerSales += invoice.totalAmount
-      totalCustomerCost += invoice.totalCost
+      totalCustomerSales += Number(invoice.totalAmount) || 0
+      totalCustomerCost += Number(invoice.totalCost) || 0
 
       invoice.items.forEach((item) => {
         if (!productSales[item.productId]) {
@@ -64,10 +64,13 @@ export function CustomerProfitDetails({
             profit: 0,
           }
         }
-        productSales[item.productId].quantitySold += item.quantity
-        productSales[item.productId].totalSales += item.quantity * item.unitPrice
-        productSales[item.productId].totalCost += item.quantity * item.costPrice
-        productSales[item.productId].profit += item.quantity * (item.unitPrice - item.costPrice)
+        const quantity = Number(item.quantity) || 0
+        const unitPrice = Number(item.unitPrice) || 0
+        const costPrice = Number(item.costPrice) || 0
+        productSales[item.productId].quantitySold += quantity
+        productSales[item.productId].totalSales += quantity * unitPrice
+        productSales[item.productId].totalCost += quantity * costPrice
+        productSales[item.productId].profit += quantity * (unitPrice - costPrice)
       })
     })
 
@@ -279,8 +282,11 @@ export function CustomerProfitDetails({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {customerProfitData.customerInvoices.map((invoice) => (
-                        <TableRow key={invoice.id} className="hover:bg-blue-50/50 transition-colors">
+                      {customerProfitData.customerInvoices.map((invoice, index) => (
+                        <TableRow
+                          key={`${invoice.id || invoice.trackingId || "no-id"}-${invoice.createdAt || "no-date"}-${index}`}
+                          className="hover:bg-blue-50/50 transition-colors"
+                        >
                           <TableCell className="font-medium text-blue-700">{invoice.id}</TableCell>
                           <TableCell className="text-gray-600">{formatDate(invoice.createdAt)}</TableCell>
                           <TableCell className="font-semibold text-gray-900">

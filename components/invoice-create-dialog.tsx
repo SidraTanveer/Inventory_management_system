@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, getCurrentDate } from "@/lib/utils"
+import { buildSearchableCustomers, getKeywordSuggestions, searchAndRank } from "@/lib/search-utils"
 import { Plus, Minus, Search, X, Hash, RefreshCw, User, Calendar } from "lucide-react"
 import type { Product, Invoice, InvoiceItem, Customer } from "@/types/app"
 
@@ -21,6 +22,12 @@ interface InvoiceCreateDialogProps {
   existingInvoices: Invoice[]
   currentAppCurrency: string
   isAdmin: boolean
+}
+
+const composeInvoiceDateTime = (date: string, time: string) => {
+  if (!date) return ""
+  if (!time) return date
+  return `${date}T${time}:00`
 }
 
 export function InvoiceCreateDialog({
@@ -39,32 +46,63 @@ export function InvoiceCreateDialog({
   const [customerPhone, setCustomerPhone] = useState("")
   const [trackingId, setTrackingId] = useState("")
   const [items, setItems] = useState<InvoiceItem[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
+  const [productSearchTerm, setProductSearchTerm] = useState("")
+  const [customerSearchTerm, setCustomerSearchTerm] = useState("")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [showCustomerSearch, setShowCustomerSearch] = useState(false)
   const [showInvoiceSearch, setShowInvoiceSearch] = useState(false)
   const [invoiceSearchTerm, setInvoiceSearchTerm] = useState("")
-  const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split("T")[0])
+  const [invoiceDate, setInvoiceDate] = useState<string>(getCurrentDate())
+  const [invoiceTime, setInvoiceTime] = useState<string>("")
 
-  const filteredProducts = products.filter(
-    (product) =>
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  const searchableCustomers = useMemo(() => {
+    return buildSearchableCustomers(customers, existingInvoices)
+  }, [customers, existingInvoices])
 
-  const filteredCustomers = customers.filter(
-    (customer) =>
-      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  const filteredProducts = searchAndRank(products, productSearchTerm, [
+    (product) => product.name,
+    (product) => product.sku,
+  ])
 
-  const filteredInvoices = existingInvoices.filter(
-    (invoice) =>
-      invoice.id.toLowerCase().includes(invoiceSearchTerm.toLowerCase()) ||
-      invoice.customerName.toLowerCase().includes(invoiceSearchTerm.toLowerCase()) ||
-      invoice.customerEmail.toLowerCase().includes(invoiceSearchTerm.toLowerCase()) ||
-      (invoice.trackingId && invoice.trackingId.toLowerCase().includes(invoiceSearchTerm.toLowerCase())),
-  )
+  const filteredCustomers = searchAndRank(searchableCustomers, customerSearchTerm, [
+    (customer) => customer.name,
+    (customer) => customer.email,
+    (customer) => customer.phone,
+  ])
+
+  const filteredInvoices = searchAndRank(existingInvoices, invoiceSearchTerm, [
+    (invoice) => invoice.id,
+    (invoice) => invoice.customerName,
+    (invoice) => invoice.customerEmail,
+    (invoice) => invoice.trackingId,
+  ])
+
+  const customerSuggestions = useMemo(() => {
+    return getKeywordSuggestions(
+      searchableCustomers,
+      customerSearchTerm,
+      [(customer) => customer.name, (customer) => customer.email, (customer) => customer.phone],
+      10,
+    )
+  }, [searchableCustomers, customerSearchTerm])
+
+  const invoiceSuggestions = useMemo(() => {
+    return getKeywordSuggestions(
+      existingInvoices,
+      invoiceSearchTerm,
+      [
+        (invoice) => invoice.id,
+        (invoice) => invoice.trackingId,
+        (invoice) => invoice.customerName,
+        (invoice) => invoice.customerEmail,
+      ],
+      10,
+    )
+  }, [existingInvoices, invoiceSearchTerm])
+
+  const productSuggestions = useMemo(() => {
+    return getKeywordSuggestions(products, productSearchTerm, [(product) => product.name, (product) => product.sku], 10)
+  }, [products, productSearchTerm])
 
   const generateTrackingId = () => {
     const prefix = "TRK"
@@ -96,7 +134,7 @@ export function InvoiceCreateDialog({
         },
       ])
     }
-    setSearchTerm("")
+    setProductSearchTerm("")
   }
 
   const updateItemQuantity = (productId: string, quantity: number) => {
@@ -121,7 +159,7 @@ export function InvoiceCreateDialog({
     setCustomerEmail(customer.email)
     setCustomerPhone(customer.phone)
     setShowCustomerSearch(false)
-    setSearchTerm("")
+    setCustomerSearchTerm("")
   }
 
   const clearCustomer = () => {
@@ -138,7 +176,7 @@ export function InvoiceCreateDialog({
     setShowInvoiceSearch(false)
     setInvoiceSearchTerm("")
 
-    const existingCustomer = customers.find((c) => c.email === invoice.customerEmail)
+    const existingCustomer = searchableCustomers.find((c) => c.email === invoice.customerEmail)
     if (existingCustomer) {
       setSelectedCustomer(existingCustomer)
     }
@@ -184,7 +222,7 @@ export function InvoiceCreateDialog({
       totalCost,
       totalProfit,
       profitPercentage,
-      createdAt: invoiceDate,
+      createdAt: composeInvoiceDateTime(invoiceDate, invoiceTime),
       currency: currentAppCurrency,
       status: "pending",
     }
@@ -199,12 +237,14 @@ export function InvoiceCreateDialog({
     setCustomerPhone("")
     setTrackingId("")
     setItems([])
-    setSearchTerm("")
+    setProductSearchTerm("")
+    setCustomerSearchTerm("")
     setSelectedCustomer(null)
     setShowCustomerSearch(false)
     setShowInvoiceSearch(false)
     setInvoiceSearchTerm("")
-    setInvoiceDate(new Date().toISOString().split("T")[0])
+    setInvoiceDate(getCurrentDate())
+    setInvoiceTime("")
     onClose()
   }
 
@@ -244,11 +284,23 @@ export function InvoiceCreateDialog({
                     className="w-full border-2 border-orange-200 focus:border-orange-400 bg-white text-gray-900"
                   />
                 </div>
+                <div className="w-[180px]">
+                  <Label htmlFor="invoiceTime" className="text-gray-700 font-semibold mb-2 block">
+                    Invoice Time
+                  </Label>
+                  <Input
+                    id="invoiceTime"
+                    type="time"
+                    value={invoiceTime}
+                    onChange={(e) => setInvoiceTime(e.target.value)}
+                    className="w-full border-2 border-orange-200 focus:border-orange-400 bg-white text-gray-900"
+                  />
+                </div>
                 <div className="pt-6">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setInvoiceDate(new Date().toISOString().split("T")[0])}
+                    onClick={() => setInvoiceDate(getCurrentDate())}
                     className="border-orange-300 text-orange-600 hover:bg-orange-50 bg-white"
                   >
                     Today
@@ -311,10 +363,16 @@ export function InvoiceCreateDialog({
                 <div className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
                   <Input
                     placeholder="Search customers by name or email..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    value={customerSearchTerm}
+                    onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                    list="invoice-create-customer-suggestions"
                     className="mb-3 border-purple-300 focus:border-purple-500 focus:ring-purple-500"
                   />
+                  <datalist id="invoice-create-customer-suggestions">
+                    {customerSuggestions.map((suggestion) => (
+                      <option key={suggestion} value={suggestion} />
+                    ))}
+                  </datalist>
                   <div className="max-h-40 overflow-y-auto space-y-2">
                     {filteredCustomers.map((customer) => (
                       <div
@@ -327,7 +385,7 @@ export function InvoiceCreateDialog({
                         <div className="text-sm text-gray-500">{customer.phone}</div>
                       </div>
                     ))}
-                    {filteredCustomers.length === 0 && searchTerm && (
+                    {filteredCustomers.length === 0 && customerSearchTerm && (
                       <div className="text-center text-gray-500 py-4">No customers found</div>
                     )}
                   </div>
@@ -340,12 +398,18 @@ export function InvoiceCreateDialog({
                     placeholder="Search invoices by ID, customer name, or email..."
                     value={invoiceSearchTerm}
                     onChange={(e) => setInvoiceSearchTerm(e.target.value)}
+                    list="invoice-create-invoice-suggestions"
                     className="mb-3 border-purple-300 focus:border-purple-500 focus:ring-purple-500"
                   />
+                  <datalist id="invoice-create-invoice-suggestions">
+                    {invoiceSuggestions.map((suggestion) => (
+                      <option key={suggestion} value={suggestion} />
+                    ))}
+                  </datalist>
                   <div className="max-h-40 overflow-y-auto space-y-2">
-                    {filteredInvoices.map((invoice) => (
+                    {filteredInvoices.map((invoice, index) => (
                       <div
-                        key={invoice.id}
+                        key={`${invoice.id || invoice.trackingId || "no-id"}-${invoice.createdAt || "no-date"}-${index}`}
                         className="p-3 border-2 border-purple-200 rounded cursor-pointer hover:bg-white hover:border-purple-400 transition-all bg-white"
                         onClick={() => selectInvoice(invoice)}
                       >
@@ -453,11 +517,17 @@ export function InvoiceCreateDialog({
               <div className="space-y-4">
                 <Input
                   placeholder="Search products by name or SKU..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={productSearchTerm}
+                  onChange={(e) => setProductSearchTerm(e.target.value)}
+                  list="invoice-create-product-suggestions"
                   className="border-2 border-blue-200 focus:border-blue-500 focus:ring-blue-500"
                 />
-                {searchTerm && (
+                <datalist id="invoice-create-product-suggestions">
+                  {productSuggestions.map((suggestion) => (
+                    <option key={suggestion} value={suggestion} />
+                  ))}
+                </datalist>
+                {productSearchTerm && (
                   <div className="max-h-40 overflow-y-auto border-2 border-blue-200 rounded-lg bg-blue-50">
                     {filteredProducts.map((product) => (
                       <div

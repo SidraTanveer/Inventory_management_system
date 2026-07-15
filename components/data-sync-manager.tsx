@@ -18,7 +18,7 @@ import {
   CheckCircle,
   Clock,
 } from "lucide-react"
-import { syncDataAcrossDevices, exportAllData, importAllData, getCurrentDateTime } from "@/lib/utils"
+import { syncDataAcrossDevices, exportAllData, importAllData, getCurrentDate, getCurrentDateTime } from "@/lib/utils"
 
 interface DataSyncManagerProps {
   onDataSync: (syncedData: any) => void
@@ -101,7 +101,7 @@ export function DataSyncManager({ onDataSync }: DataSyncManagerProps) {
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement("a")
       anchor.href = url
-      anchor.download = `glow-with-vibes-backup-${getCurrentDateTime().split("T")[0]}.json`
+      anchor.download = `glow-with-vibes-backup-${getCurrentDate()}.json`
       document.body.appendChild(anchor)
       anchor.click()
       document.body.removeChild(anchor)
@@ -199,7 +199,7 @@ export function DataSyncManager({ onDataSync }: DataSyncManagerProps) {
           {lastSyncTime && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Clock className="h-4 w-4" />
-              Last sync: {new Date(lastSyncTime).toLocaleString()}
+              Last sync: {lastSyncTime}
             </div>
           )}
         </div>

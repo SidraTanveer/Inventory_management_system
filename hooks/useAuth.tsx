@@ -41,6 +41,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loginRequests, setLoginRequests] = useState<LoginRequest[]>([])
   const { toast } = useToast()
 
+  const fetchLoginRequestsFromServer = async () => {
+    try {
+      const response = await fetch("/api/login-requests")
+      if (!response.ok) {
+        return
+      }
+      const result = await response.json()
+      if (Array.isArray(result)) {
+        persistLoginRequests(result)
+      }
+    } catch (error) {
+      console.warn("Unable to fetch login requests from server:", error)
+    }
+  }
+
   // Simulate admin password for demonstration purposes (no database)
   const [adminSimulatedPassword, setAdminSimulatedPassword] = useState("password")
 
@@ -64,20 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const fetchLoginRequests = async () => {
-      try {
-        const response = await fetch("/api/login-requests")
-        if (!response.ok) {
-          return
-        }
-        const result = await response.json()
-        setLoginRequests(result)
-      } catch (error) {
-        console.warn("Unable to fetch login requests from server:", error)
-      }
-    }
-
-    fetchLoginRequests()
+    fetchLoginRequestsFromServer()
   }, [])
 
   const persistRegisteredUsers = (users: RegisteredUser[]) => {
@@ -120,7 +122,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!result.success && result.request) {
-        setLoginRequests((prev) => [result.request, ...prev])
+        setLoginRequests((prev) => {
+          const withoutDuplicate = prev.filter((request) => request.id !== result.request.id)
+          return [result.request, ...withoutDuplicate]
+        })
       }
 
       toast({
@@ -157,10 +162,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       const result = await response.json()
 
-      if (result.success && result.user) {
+      if (result.success && (result.request || result.message)) {
+        if (result.request) {
+          setLoginRequests((prev) => {
+            const withoutDuplicate = prev.filter((request) => request.id !== result.request.id)
+            return [result.request, ...withoutDuplicate]
+          })
+        }
         toast({
-          title: "Registration Successful",
-          description: `Account for ${name} has been created. Please login to continue.`,
+          title: "Request Submitted",
+          description: result.message || `Signup request for ${name} has been sent to admin for approval.`,
         })
         return true
       }
@@ -193,27 +204,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     persistLoginRequests([newRequest, ...loginRequests])
   }
 
-  const approveLoginRequest = (requestId: string) => {
-    const updated = loginRequests.map((request) =>
-      request.id === requestId ? { ...request, status: "approved" } : request,
-    )
-    persistLoginRequests(updated)
-    toast({
-      title: "Request Approved",
-      description: "The login request has been approved by the admin.",
-    })
+  const approveLoginRequest = async (requestId: string) => {
+    try {
+      const response = await fetch("/api/login-requests", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: requestId, action: "approve" }),
+      })
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to approve request")
+      }
+
+      await fetchLoginRequestsFromServer()
+      toast({
+        title: "Request Approved",
+        description: "The request has been approved and account access is now enabled.",
+      })
+    } catch (error) {
+      toast({
+        title: "Approval Failed",
+        description: error instanceof Error ? error.message : "Unable to approve request.",
+        variant: "destructive",
+      })
+    }
   }
 
-  const rejectLoginRequest = (requestId: string) => {
-    const updated = loginRequests.map((request) =>
-      request.id === requestId ? { ...request, status: "rejected" } : request,
-    )
-    persistLoginRequests(updated)
-    toast({
-      title: "Request Rejected",
-      description: "The login request has been rejected.",
-      variant: "destructive",
-    })
+  const rejectLoginRequest = async (requestId: string) => {
+    try {
+      const response = await fetch("/api/login-requests", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: requestId, action: "reject" }),
+      })
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to reject request")
+      }
+
+      await fetchLoginRequestsFromServer()
+      toast({
+        title: "Request Rejected",
+        description: "The request has been rejected.",
+        variant: "destructive",
+      })
+    } catch (error) {
+      toast({
+        title: "Rejection Failed",
+        description: error instanceof Error ? error.message : "Unable to reject request.",
+        variant: "destructive",
+      })
+    }
   }
 
   const forgotPassword = async (email: string): Promise<boolean> => {

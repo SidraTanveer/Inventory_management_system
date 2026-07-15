@@ -113,33 +113,37 @@ export function DashboardOverview({
         const invoiceDate = new Date(invoice.createdAt)
         return invoiceDate.getFullYear() === Number.parseInt(selectedYear)
       })
-      .reduce((sum, invoice) => sum + invoice.totalProfit, 0)
+      .reduce((sum, invoice) => sum + (Number(invoice.totalProfit) || 0), 0)
   }, [invoices, selectedYear])
 
   // Calculate metrics based on filtered invoices
   const totalProducts = products.length
   const totalStockValue = useMemo(() => {
     if (!products || !Array.isArray(products)) return 0
-    return products.reduce((sum, product) => sum + product.stock * product.costPrice, 0)
+    return products.reduce((sum, product) => sum + (Number(product.stock) || 0) * (Number(product.costPrice) || 0), 0)
   }, [products])
 
   const totalInvoices = filteredInvoices.length
   const totalSalesValue = useMemo(() => {
-    return filteredInvoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0)
+    return filteredInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalAmount) || 0), 0)
   }, [filteredInvoices])
 
   const totalCostValue = useMemo(() => {
-    return filteredInvoices.reduce((sum, invoice) => sum + invoice.totalCost, 0)
+    return filteredInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalCost) || 0), 0)
   }, [filteredInvoices])
 
   const totalProfit = useMemo(() => {
-    return filteredInvoices.reduce((sum, invoice) => sum + invoice.totalProfit, 0)
+    return filteredInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalProfit) || 0), 0)
   }, [filteredInvoices])
 
   const totalUsers = users.length + guestUsers.length
 
   // Calculate profit margin percentage
-  const profitMargin = totalSalesValue > 0 ? (totalProfit / totalSalesValue) * 100 : 0
+  const profitMargin = useMemo(() => {
+    const sales = Number(totalSalesValue) || 0
+    const profit = Number(totalProfit) || 0
+    return sales > 0 ? (profit / sales) * 100 : 0
+  }, [totalSalesValue, totalProfit])
 
   // Low stock products (less than 10 items)
   const lowStockProducts = useMemo(() => {
@@ -151,17 +155,19 @@ export function DashboardOverview({
     const productSales: { [key: string]: { name: string; quantity: number; revenue: number } } = {}
 
     filteredInvoices.forEach((invoice) => {
-      invoice.items.forEach((item) => {
-        if (!productSales[item.productId]) {
-          productSales[item.productId] = {
-            name: item.productName,
-            quantity: 0,
-            revenue: 0,
+      if (invoice.items && Array.isArray(invoice.items)) {
+        invoice.items.forEach((item) => {
+          if (!productSales[item.productId]) {
+            productSales[item.productId] = {
+              name: item.productName,
+              quantity: 0,
+              revenue: 0,
+            }
           }
-        }
-        productSales[item.productId].quantity += item.quantity
-        productSales[item.productId].revenue += item.quantity * item.unitPrice
-      })
+          productSales[item.productId].quantity += Number(item.quantity) || 0
+          productSales[item.productId].revenue += (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)
+        })
+      }
     })
 
     return Object.values(productSales)
@@ -170,7 +176,14 @@ export function DashboardOverview({
   }, [filteredInvoices])
 
   const recentInvoices = useMemo(() => {
-    return filteredInvoices
+    const uniqueById = new Map<string, Invoice>()
+    filteredInvoices.forEach((invoice) => {
+      if (invoice?.id && !uniqueById.has(invoice.id)) {
+        uniqueById.set(invoice.id, invoice)
+      }
+    })
+
+    return Array.from(uniqueById.values())
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 5)
   }, [filteredInvoices])
@@ -214,7 +227,7 @@ export function DashboardOverview({
           invoiceDate.getFullYear() === Number.parseInt(selectedYear)
         )
       })
-      .reduce((sum, invoice) => sum + invoice.totalProfit, 0)
+      .reduce((sum, invoice) => sum + (Number(invoice.totalProfit) || 0), 0)
   }, [invoices, selectedMonth, selectedYear, showAllTime, totalProfit])
 
   const comparisonMonthProfit = useMemo(() => {
@@ -233,14 +246,16 @@ export function DashboardOverview({
         const invoiceDate = new Date(invoice.createdAt)
         return invoiceDate.getMonth() + 1 === prevMonth && invoiceDate.getFullYear() === prevYear
       })
-      .reduce((sum, invoice) => sum + invoice.totalProfit, 0)
+      .reduce((sum, invoice) => sum + (Number(invoice.totalProfit) || 0), 0)
   }, [invoices, selectedMonth, selectedYear, showAllTime])
 
   const profitChangePercentage = useMemo(() => {
-    if (showAllTime || comparisonMonthProfit === 0) {
-      return targetMonthProfit > 0 ? 100 : 0
+    const target = Number(targetMonthProfit) || 0
+    const comparison = Number(comparisonMonthProfit) || 0
+    if (showAllTime || comparison === 0) {
+      return target > 0 ? 100 : 0
     }
-    return ((targetMonthProfit - comparisonMonthProfit) / Math.abs(comparisonMonthProfit)) * 100
+    return ((target - comparison) / Math.abs(comparison)) * 100
   }, [targetMonthProfit, comparisonMonthProfit, showAllTime])
 
   const handleResetToCurrentMonth = () => {
@@ -721,9 +736,9 @@ export function DashboardOverview({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recentInvoices.map((invoice) => (
-                    <TableRow key={invoice.id} className="hover:bg-gray-50">
-                      <TableCell className="font-medium">{invoice.id}</TableCell>
+                  {recentInvoices.map((invoice, index) => (
+                    <TableRow key={`${invoice.id || "no-id"}-${invoice.createdAt || "no-date"}-${index}`} className="hover:bg-gray-50">
+                      <TableCell className="font-medium">{invoice.id || "N/A"}</TableCell>
                       <TableCell>
                         <div>
                           <p className="font-medium">{invoice.customerName}</p>
@@ -753,7 +768,7 @@ export function DashboardOverview({
                         <div className="flex items-center">
                           <Percent className="h-3 w-3 text-blue-600 mr-1" />
                           <span className="font-medium text-blue-600">
-                            {(invoice.profitPercentage ?? 0).toFixed(1)}%
+                            {(Number(invoice.profitPercentage) || 0).toFixed(1)}%
                           </span>
                         </div>
                       </TableCell>

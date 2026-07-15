@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -18,6 +19,8 @@ export default function SignupPage() {
   const [role, setRole] = useState<"sales" | "admin">("sales")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false)
+  const [successMessage, setSuccessMessage] = useState("")
   const { register } = useAuth()
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -27,14 +30,33 @@ export default function SignupPage() {
     const success = await register(email, password, name, role)
     setLoading(false)
     if (success) {
-      router.push("/login")
+      setSuccessMessage(`Signup request for ${name} has been submitted. You can login after admin approval.`)
+      setShowSuccessPopup(true)
     } else {
       setError("Registration failed. Please try again with a different email.")
     }
   }
 
+  const handleSuccessPopupClose = () => {
+    setShowSuccessPopup(false)
+    router.push("/login")
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.12),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.16),transparent_22%),linear-gradient(180deg,#f8fafc,#eef2ff)] p-4">
+      <Dialog open={showSuccessPopup} onOpenChange={setShowSuccessPopup}>
+        <DialogContent className="sm:max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-green-700">Request Submitted</DialogTitle>
+            <DialogDescription className="text-slate-600">{successMessage}</DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 flex justify-end">
+            <Button onClick={handleSuccessPopupClose} className="bg-green-600 hover:bg-green-700 text-white">
+              Continue to Login
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Card className="w-full max-w-md border border-white/70 bg-white/90 shadow-2xl shadow-indigo-200/30 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-950/95">
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-bold" style={{ color: "var(--imperial-purple)" }}>

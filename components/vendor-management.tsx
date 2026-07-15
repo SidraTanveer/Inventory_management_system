@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Trash2, Edit, Plus, Building2, Package, TrendingUp, Download, Upload } from "lucide-react"
 import type { Product, Invoice } from "@/types/app"
-import { formatCurrency, generateId } from "@/lib/utils"
+import { formatCurrency, generateId, getCurrentDate } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
 import { generateVendorsPDF } from "@/components/data-export-pdf-generator"
 import { exportVendorsToExcel, importVendorsFromExcel } from "@/lib/excel-utils"
@@ -85,7 +85,7 @@ export function VendorManagement({
     const newVendor: Vendor = {
       id: generateId(),
       ...formData,
-      createdAt: new Date().toISOString().split("T")[0],
+      createdAt: getCurrentDate(),
     }
     onAddVendor(newVendor)
     setIsAddDialogOpen(false)
@@ -127,11 +127,11 @@ export function VendorManagement({
 
   const handleDownloadAllVendors = async () => {
     const doc = await generateVendorsPDF(vendors, products, currentAppCurrency)
-    doc.save(`vendors-detailed-${new Date().toISOString().split("T")[0]}.pdf`)
+    doc.save(`vendors-detailed-${getCurrentDate()}.pdf`)
 
     // Save to database
     await savePDFToDatabase(doc, {
-      filename: `vendors-detailed-${new Date().toISOString().split("T")[0]}.pdf`,
+      filename: `vendors-detailed-${getCurrentDate()}.pdf`,
       type: "vendors",
     })
   }
@@ -174,8 +174,11 @@ export function VendorManagement({
   const getVendorStats = (vendorId: string) => {
     const vendorProducts = getVendorProducts(vendorId)
     const totalProducts = vendorProducts.length
-    const totalStock = vendorProducts.reduce((sum, product) => sum + product.stock, 0)
-    const totalValue = vendorProducts.reduce((sum, product) => sum + product.unitPrice * product.stock, 0)
+    const totalStock = vendorProducts.reduce((sum, product) => sum + (Number(product.stock) || 0), 0)
+    const totalValue = vendorProducts.reduce(
+      (sum, product) => sum + (Number(product.unitPrice) || 0) * (Number(product.stock) || 0),
+      0,
+    )
 
     return {
       totalProducts,
@@ -191,8 +194,10 @@ export function VendorManagement({
     allInvoices.forEach((invoice) => {
       const item = invoice.items.find((item) => item.productId === productId)
       if (item) {
-        totalQuantitySold += item.quantity
-        totalSalesValue += item.quantity * item.unitPrice
+        const quantity = Number(item.quantity) || 0
+        const unitPrice = Number(item.unitPrice) || 0
+        totalQuantitySold += quantity
+        totalSalesValue += quantity * unitPrice
       }
     })
 
@@ -206,11 +211,14 @@ export function VendorManagement({
     const vendorProducts = getVendorProducts(vendorId)
 
     return vendorProducts.map((product) => {
-      const totalPurchased = product.purchaseHistory.reduce((sum, purchase) => sum + purchase.quantity, 0)
-      const totalPurchaseCost = product.purchaseHistory.reduce((sum, purchase) => sum + purchase.totalCost, 0)
+      const totalPurchased = product.purchaseHistory.reduce((sum, purchase) => sum + (Number(purchase.quantity) || 0), 0)
+      const totalPurchaseCost = product.purchaseHistory.reduce(
+        (sum, purchase) => sum + (Number(purchase.totalCost) || 0),
+        0,
+      )
 
       const salesDetails = getProductOverallSalesDetails(product.id)
-      const overallProfit = salesDetails.totalSalesValue - salesDetails.totalQuantitySold * product.costPrice
+      const overallProfit = salesDetails.totalSalesValue - salesDetails.totalQuantitySold * (Number(product.costPrice) || 0)
 
       return {
         ...product,

@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast"
 import { generateCustomersPDF } from "@/components/data-export-pdf-generator"
 import { exportCustomersToExcel, importCustomersFromExcel } from "@/lib/excel-utils"
 import { savePDFToDatabase } from "@/lib/pdf-utils"
+import { getKeywordSuggestions } from "@/lib/search-utils"
 
 interface CustomerManagementProps {
   customers: Customer[]
@@ -67,6 +68,15 @@ export function CustomerManagement({
         customer.phone.toLowerCase().includes(lowerCaseSearchTerm),
     )
   }, [customers, searchTerm, filterType])
+
+  const customerSuggestions = useMemo(() => {
+    return getKeywordSuggestions(
+      customers,
+      searchTerm,
+      [(customer) => customer.name, (customer) => customer.email, (customer) => customer.phone],
+      10,
+    )
+  }, [customers, searchTerm])
 
   const handleOpenDialog = (customer?: Customer) => {
     if (customer) {
@@ -120,11 +130,11 @@ export function CustomerManagement({
 
   const handleDownloadAllCustomers = async () => {
     const doc = await generateCustomersPDF(customers, invoices, currentAppCurrency)
-    doc.save(`customers-detailed-${new Date().toISOString().split("T")[0]}.pdf`)
+    doc.save(`customers-detailed-${getCurrentDate()}.pdf`)
 
     // Save to database
     await savePDFToDatabase(doc, {
-      filename: `customers-detailed-${new Date().toISOString().split("T")[0]}.pdf`,
+      filename: `customers-detailed-${getCurrentDate()}.pdf`,
       type: "customers",
     })
 
@@ -261,8 +271,14 @@ export function CustomerManagement({
                 placeholder="Search customers..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                list="customer-search-suggestions"
                 className="pl-10 border-blue-200 focus:border-blue-500 focus:ring-blue-500"
               />
+              <datalist id="customer-search-suggestions">
+                {customerSuggestions.map((suggestion) => (
+                  <option key={suggestion} value={suggestion} />
+                ))}
+              </datalist>
             </div>
             <Select onValueChange={(value: "all" | "frequent" | "new") => setFilterType(value)} defaultValue="all">
               <SelectTrigger className="w-[180px] border-blue-200 focus:border-blue-500 focus:ring-blue-500">

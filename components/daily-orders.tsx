@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { Invoice, Product, User } from "@/types/app"
+import type { Invoice, Product, User, Customer } from "@/types/app"
 import { formatCurrency } from "@/lib/utils"
 import { Search, Calendar, Download, Eye, Edit, Trash2, Plus, CheckCircle } from "lucide-react"
 import { InvoiceCreateDialog } from "@/components/invoice-create-dialog"
@@ -14,18 +14,37 @@ import { generateDailyOrdersPDF } from "@/components/daily-orders-pdf-generator"
 import { exportDailyOrdersToExcel } from "@/lib/excel-utils"
 import { savePDFToDatabase } from "@/lib/pdf-utils"
 import { useToast } from "@/hooks/use-toast"
+import { buildSearchableCustomers, getKeywordSuggestions } from "@/lib/search-utils"
+import { formatDate, formatPakistanTime, getCurrentDate, toPakistanDateKey } from "@/lib/utils"
 
 // Helper ⚡
 const normalizeStatus = (status?: Invoice["status"]): Invoice["status"] => status ?? "pending"
+
+const getSafeDateKey = (value: string | undefined | null) => {
+  if (!value) return null
+  return toPakistanDateKey(value)
+}
+
+const getSafeTimeLabel = (value: string | undefined | null) => {
+  if (!value) return "Invalid date"
+  return formatPakistanTime(value)
+}
 
 const formatStatusLabel = (status?: Invoice["status"]) => {
   const s = normalizeStatus(status)
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+const getInvoiceRowKey = (invoice: Invoice, index: number) => {
+  const idPart = invoice.id || invoice.trackingId || "no-id"
+  const datePart = invoice.createdAt || "no-date"
+  return `${idPart}-${datePart}-${index}`
+}
+
 interface DailyOrdersProps {
   invoices: Invoice[]
   products: Product[]
+  customers: Customer[]
   onViewInvoice: (invoice: Invoice) => void
   onEditInvoice: (invoice: Invoice) => void
   onDeleteInvoice: (invoiceId: string) => void
@@ -40,6 +59,7 @@ interface DailyOrdersProps {
 export function DailyOrders({
   invoices,
   products,
+  customers,
   onViewInvoice,
   onEditInvoice,
   onDeleteInvoice,
@@ -52,39 +72,54 @@ export function DailyOrders({
 }: DailyOrdersProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date()
-    return today.toISOString().split("T")[0]
+    return getCurrentDate()
   })
   const [filterStatus, setFilterStatus] = useState("all")
   const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false)
   const [isDownloadingAll, setIsDownloadingAll] = useState(false)
+  const [dailyOrdersFromDb, setDailyOrdersFromDb] = useState<Invoice[]>([])
   const { toast } = useToast()
 
-  // Get customers from invoices for the create dialog
-  const customers = useMemo(() => {
-    const uniqueCustomers = new Map()
-    invoices.forEach((invoice) => {
-      if (!uniqueCustomers.has(invoice.customerEmail)) {
-        uniqueCustomers.set(invoice.customerEmail, {
-          id: `cust-${invoice.customerEmail}`,
-          name: invoice.customerName,
-          email: invoice.customerEmail,
-          phone: invoice.customerPhone,
-          type: "frequent",
-          createdAt: invoice.createdAt,
-        })
+  useEffect(() => {
+    const loadDailyOrders = async () => {
+      try {
+        const response = await fetch("/api/daily-orders")
+        if (!response.ok) return
+        const data = await response.json()
+        if (Array.isArray(data)) {
+          setDailyOrdersFromDb(data)
+        }
+      } catch (error) {
+        console.warn("Unable to load daily orders from server:", error)
+      }
+    }
+
+    loadDailyOrders()
+  }, [])
+
+  const mergedInvoices = useMemo(() => {
+    const merged = new Map<string, Invoice>()
+    ;[...dailyOrdersFromDb, ...invoices].forEach((invoice) => {
+      if (invoice?.id) {
+        merged.set(invoice.id, invoice)
       }
     })
-    return Array.from(uniqueCustomers.values())
-  }, [invoices])
+    return Array.from(merged.values())
+  }, [dailyOrdersFromDb, invoices])
+
+  // Keep customer search always up-to-date by merging saved customers with invoice customers.
+  const searchableCustomers = useMemo(() => {
+    return buildSearchableCustomers(customers, mergedInvoices)
+  }, [customers, mergedInvoices])
 
   const filteredInvoices = useMemo(() => {
-    let filtered = invoices
+    let filtered = mergedInvoices
 
     // Filter by selected date
     if (selectedDate) {
       filtered = filtered.filter((invoice) => {
-        const invoiceDate = new Date(invoice.createdAt).toISOString().split("T")[0]
+        const invoiceDate = getSafeDateKey(invoice.createdAt)
+        if (!invoiceDate) return false
         return invoiceDate === selectedDate
       })
     }
@@ -99,25 +134,46 @@ export function DailyOrders({
       const lowerCaseSearchTerm = searchTerm.toLowerCase()
       filtered = filtered.filter(
         (invoice) =>
-          invoice.id.toLowerCase().includes(lowerCaseSearchTerm) ||
-          invoice.customerName.toLowerCase().includes(lowerCaseSearchTerm) ||
-          invoice.customerEmail.toLowerCase().includes(lowerCaseSearchTerm) ||
-          invoice.items.some((item) => item.productName.toLowerCase().includes(lowerCaseSearchTerm)),
+          (invoice.id || "").toLowerCase().includes(lowerCaseSearchTerm) ||
+          (invoice.customerName || "").toLowerCase().includes(lowerCaseSearchTerm) ||
+          (invoice.customerEmail || "").toLowerCase().includes(lowerCaseSearchTerm) ||
+          (Array.isArray(invoice.items)
+            ? invoice.items.some((item) => (item.productName || "").toLowerCase().includes(lowerCaseSearchTerm))
+            : false),
       )
     }
 
-    return filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  }, [invoices, selectedDate, filterStatus, searchTerm])
+    return filtered.sort((a, b) => {
+      const aTime = new Date(a.createdAt).getTime()
+      const bTime = new Date(b.createdAt).getTime()
+      return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime)
+    })
+  }, [mergedInvoices, selectedDate, filterStatus, searchTerm])
+
+  const dailyOrderSuggestions = useMemo(() => {
+    return getKeywordSuggestions(
+      mergedInvoices,
+      searchTerm,
+      [
+        (invoice) => invoice.id,
+        (invoice) => invoice.customerName,
+        (invoice) => invoice.customerEmail,
+        (invoice) => invoice.items?.map((item) => item.productName).join(" "),
+      ],
+      12,
+    )
+  }, [mergedInvoices, searchTerm])
 
   const dailyStats = useMemo(() => {
     const todayInvoices = filteredInvoices.filter((invoice) => {
-      const invoiceDate = new Date(invoice.createdAt).toISOString().split("T")[0]
+      const invoiceDate = getSafeDateKey(invoice.createdAt)
+      if (!invoiceDate) return false
       return invoiceDate === selectedDate
     })
 
     const totalOrders = todayInvoices.length
-    const totalRevenue = todayInvoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0)
-    const totalProfit = todayInvoices.reduce((sum, invoice) => sum + invoice.totalProfit, 0)
+    const totalRevenue = todayInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalAmount) || 0), 0)
+    const totalProfit = todayInvoices.reduce((sum, invoice) => sum + (Number(invoice.totalProfit) || 0), 0)
     const completedOrders = todayInvoices.filter((invoice) => normalizeStatus(invoice.status) === "completed").length
     const pendingOrders = todayInvoices.filter((invoice) => normalizeStatus(invoice.status) === "pending").length
 
@@ -159,11 +215,7 @@ export function DailyOrders({
       const doc = await generateDailyOrdersPDF(filteredInvoices, selectedDate, currentAppCurrency)
 
       // Save to database
-      const dateStr = new Date(selectedDate).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
+      const dateStr = formatDate(selectedDate)
       await savePDFToDatabase(doc, {
         filename: `daily-orders-${dateStr.replace(/\s/g, "-")}.pdf`,
         type: "daily_orders",
@@ -326,8 +378,14 @@ export function DailyOrders({
                 placeholder="Search by Invoice ID, customer, or product..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                list="daily-orders-search-suggestions"
                 className="pl-10 border-blue-200 focus:border-blue-500 focus:ring-blue-500"
               />
+              <datalist id="daily-orders-search-suggestions">
+                {dailyOrderSuggestions.map((suggestion) => (
+                  <option key={suggestion} value={suggestion} />
+                ))}
+              </datalist>
             </div>
             <Select onValueChange={setFilterStatus} defaultValue="all">
               <SelectTrigger className="w-[180px] border-blue-200 focus:border-blue-500 focus:ring-blue-500">
@@ -357,8 +415,8 @@ export function DailyOrders({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredInvoices.map((invoice) => (
-                    <TableRow key={invoice.id} className="hover:bg-blue-50/50 transition-colors">
+                  {filteredInvoices.map((invoice, index) => (
+                    <TableRow key={getInvoiceRowKey(invoice, index)} className="hover:bg-blue-50/50 transition-colors">
                       <TableCell className="font-medium text-blue-700 font-mono">{invoice.id}</TableCell>
                       <TableCell>
                         <div>
@@ -380,11 +438,7 @@ export function DailyOrders({
                         {formatStatusLabel(invoice.status)}
                       </TableCell>
                       <TableCell className="text-gray-600">
-                        {new Date(invoice.createdAt).toLocaleTimeString("en-US", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: true,
-                        })}
+                        {getSafeTimeLabel(invoice.createdAt)}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
@@ -467,7 +521,7 @@ export function DailyOrders({
         onClose={() => setIsCreateInvoiceOpen(false)}
         onSave={onCreateInvoice}
         products={products}
-        customers={customers}
+        customers={searchableCustomers}
         existingInvoices={invoices}
         currentAppCurrency={currentAppCurrency}
         isAdmin={user?.role === "admin"}

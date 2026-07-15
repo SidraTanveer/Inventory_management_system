@@ -1,5 +1,21 @@
 import type { Invoice } from "@/types/app"
-import { formatCurrency, formatDate } from "@/lib/utils"
+import { formatCurrency, formatDate, formatPakistanTime, getCurrentDateTime } from "@/lib/utils"
+
+const formatSafeTime = (value: string | undefined | null) => {
+  if (!value) return "Invalid date"
+  return formatPakistanTime(value)
+}
+
+const formatSafeDate = (value: string | undefined | null) => {
+  if (!value) return "Invalid date"
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "Invalid date"
+  return parsed.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+}
 
 export async function generateDailyOrdersPDF(invoices: Invoice[], selectedDate: string, currency: string) {
   try {
@@ -24,7 +40,7 @@ export async function generateDailyOrdersPDF(invoices: Invoice[], selectedDate: 
     currentY += 5
     doc.text(`Date: ${formatDate(selectedDate)}`, pageWidth / 2, currentY, { align: "center" })
     currentY += 5
-    doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, currentY, { align: "center" })
+    doc.text(`Generated: ${getCurrentDateTime()}`, pageWidth / 2, currentY, { align: "center" })
 
     // Divider
     doc.setDrawColor(200, 200, 200)
@@ -33,8 +49,8 @@ export async function generateDailyOrdersPDF(invoices: Invoice[], selectedDate: 
 
     // Summary Statistics
     const totalOrders = invoices.length
-    const totalRevenue = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
-    const totalProfit = invoices.reduce((sum, inv) => sum + inv.totalProfit, 0)
+    const totalRevenue = invoices.reduce((sum, inv) => sum + (Number(inv.totalAmount) || 0), 0)
+    const totalProfit = invoices.reduce((sum, inv) => sum + (Number(inv.totalProfit) || 0), 0)
     const completedOrders = invoices.filter((inv) => inv.status === "completed").length
     const pendingOrders = invoices.filter((inv) => inv.status === "pending").length
 
@@ -129,17 +145,13 @@ export async function generateDailyOrdersPDF(invoices: Invoice[], selectedDate: 
       doc.text(formatCurrency(invoice.totalAmount, currency), 79, currentY)
       doc.text(formatCurrency(invoice.totalProfit, currency), 103, currentY)
 
-      const statusColor = invoice.status === "completed" ? [0, 128, 0] : [255, 165, 0]
+      const statusColor: [number, number, number] =
+        invoice.status === "completed" ? [0, 128, 0] : [255, 165, 0]
       doc.setTextColor(...statusColor)
       doc.text(invoice.status?.toUpperCase() || "PENDING", 127, currentY)
       doc.setTextColor(50, 50, 50)
 
-      const time = new Date(invoice.createdAt).toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      })
-      doc.text(time, 149, currentY)
+      doc.text(formatSafeTime(invoice.createdAt), 149, currentY)
 
       currentY += 6
       rowCount++
@@ -152,11 +164,7 @@ export async function generateDailyOrdersPDF(invoices: Invoice[], selectedDate: 
     doc.setTextColor(100, 100, 100)
     doc.text("Glow With Vibes - Daily Orders Report", pageWidth / 2, footerY, { align: "center" })
 
-    const dateStr = new Date(selectedDate).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
+    const dateStr = formatSafeDate(selectedDate)
     doc.save(`daily-orders-${dateStr.replace(/\s/g, "-")}.pdf`)
 
     return doc

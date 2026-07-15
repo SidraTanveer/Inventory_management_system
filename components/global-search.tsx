@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import { buildSearchableCustomers, getKeywordSuggestions, searchAndRank } from "@/lib/search-utils"
 import {
   Search,
   Package,
@@ -67,6 +68,10 @@ export function GlobalSearch({
 }: GlobalSearchProps) {
   const [searchTerm, setSearchTerm] = useState("")
 
+  const searchableCustomers = useMemo(() => {
+    return buildSearchableCustomers(customers, invoices)
+  }, [customers, invoices])
+
   // Navigation items
   const navigationItems = [
     { id: "dashboard", name: "Dashboard", icon: LayoutDashboard, description: "Overview and analytics" },
@@ -107,57 +112,61 @@ export function GlobalSearch({
     const term = searchTerm.toLowerCase()
 
     return {
-      navigation: navigationItems.filter(
-        (item) => item.name.toLowerCase().includes(term) || item.description.toLowerCase().includes(term),
-      ),
-      products: products.filter(
-        (product) =>
-          product.name.toLowerCase().includes(term) ||
-          product.description.toLowerCase().includes(term) ||
-          product.sku.toLowerCase().includes(term) ||
-          product.category.toLowerCase().includes(term),
-      ),
-      invoices: invoices.filter(
-        (invoice) =>
-          invoice.id.toLowerCase().includes(term) ||
-          invoice.customerName.toLowerCase().includes(term) ||
-          invoice.customerEmail.toLowerCase().includes(term) ||
-          (invoice.trackingId && invoice.trackingId.toLowerCase().includes(term)),
-      ),
-      users: users.filter(
-        (user) =>
-          user.name.toLowerCase().includes(term) ||
-          user.email.toLowerCase().includes(term) ||
-          user.role.toLowerCase().includes(term),
-      ),
-      guests: guestUsers.filter(
-        (guest) => guest.name.toLowerCase().includes(term) || guest.email.toLowerCase().includes(term),
-      ),
-      vendors: vendors.filter(
-        (vendor) =>
-          vendor.name.toLowerCase().includes(term) ||
-          vendor.email.toLowerCase().includes(term) ||
-          vendor.phone.toLowerCase().includes(term),
-      ),
-      customers: customers.filter(
-        (customer) =>
-          customer.name.toLowerCase().includes(term) ||
-          customer.email.toLowerCase().includes(term) ||
-          customer.phone.toLowerCase().includes(term),
-      ),
-      deals: deals.filter(
-        (deal) => deal.name.toLowerCase().includes(term) || deal.description.toLowerCase().includes(term),
-      ),
-      trash: trashItems.filter(
-        (item) =>
-          (item.data as any).name?.toLowerCase().includes(term) ||
-          item.originalId.toLowerCase().includes(term) ||
-          item.type.toLowerCase().includes(term),
-      ),
+      navigation: searchAndRank(navigationItems, term, [(item) => item.name, (item) => item.description]),
+      products: searchAndRank(products, term, [
+        (product) => product.name,
+        (product) => product.description,
+        (product) => product.sku,
+        (product) => product.category,
+      ]),
+      invoices: searchAndRank(invoices, term, [
+        (invoice) => invoice.id,
+        (invoice) => invoice.customerName,
+        (invoice) => invoice.customerEmail,
+        (invoice) => invoice.trackingId,
+      ]),
+      users: searchAndRank(users, term, [(user) => user.name, (user) => user.email, (user) => user.role]),
+      guests: searchAndRank(guestUsers, term, [(guest) => guest.name, (guest) => guest.email]),
+      vendors: searchAndRank(vendors, term, [(vendor) => vendor.name, (vendor) => vendor.email, (vendor) => vendor.phone]),
+      customers: searchAndRank(searchableCustomers, term, [
+        (customer) => customer.name,
+        (customer) => customer.email,
+        (customer) => customer.phone,
+      ]),
+      deals: searchAndRank(deals, term, [(deal) => deal.name, (deal) => deal.description]),
+      trash: searchAndRank(trashItems, term, [
+        (item) => (item.data as any).name,
+        (item) => item.originalId,
+        (item) => item.type,
+      ]),
     }
-  }, [searchTerm, products, invoices, users, guestUsers, vendors, customers, deals, trashItems])
+  }, [searchTerm, products, invoices, users, guestUsers, vendors, searchableCustomers, deals, trashItems])
 
   const totalResults = Object.values(searchResults).reduce((sum, results) => sum + results.length, 0)
+
+  const globalSuggestions = useMemo(() => {
+    const navSuggestions = getKeywordSuggestions(
+      navigationItems,
+      searchTerm,
+      [(item) => item.name, (item) => item.description],
+      4,
+    )
+    const invoiceSuggestions = getKeywordSuggestions(
+      invoices,
+      searchTerm,
+      [(invoice) => invoice.id, (invoice) => invoice.trackingId, (invoice) => invoice.customerName],
+      4,
+    )
+    const productSuggestions = getKeywordSuggestions(products, searchTerm, [(product) => product.name, (product) => product.sku], 4)
+    const customerSuggestions = getKeywordSuggestions(
+      searchableCustomers,
+      searchTerm,
+      [(customer) => customer.name, (customer) => customer.email],
+      4,
+    )
+
+    return [...navSuggestions, ...invoiceSuggestions, ...productSuggestions, ...customerSuggestions].slice(0, 12)
+  }, [searchTerm, navigationItems, invoices, products, searchableCustomers])
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -210,9 +219,15 @@ export function GlobalSearch({
               placeholder="Search tracking IDs, customers, deals, and more..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              list="global-search-suggestions"
               className="pl-10 text-base"
               autoFocus
             />
+            <datalist id="global-search-suggestions">
+              {globalSuggestions.map((suggestion) => (
+                <option key={suggestion} value={suggestion} />
+              ))}
+            </datalist>
           </div>
           {searchTerm && (
             <div className="mt-2 text-sm text-gray-600">
@@ -261,8 +276,11 @@ export function GlobalSearch({
                   Invoices ({searchResults.invoices.length})
                 </h3>
                 <div className="space-y-2">
-                  {searchResults.invoices.map((invoice) => (
-                    <div key={invoice.id} className="p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                  {searchResults.invoices.map((invoice, index) => (
+                    <div
+                      key={`${invoice.id || invoice.trackingId || "no-id"}-${invoice.createdAt || "no-date"}-${index}`}
+                      className="p-3 border rounded-lg hover:bg-gray-50 transition-colors"
+                    >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="flex items-center space-x-2 mb-1">

@@ -1,4 +1,5 @@
 import { query } from "@/lib/db"
+import { mapDatabaseRows, mapDatabaseRow } from "@/lib/db-mapper"
 
 export async function getTrashItems() {
   const res = await query(`SELECT id, original_id, type, data, deleted_at FROM trash_items ORDER BY deleted_at DESC`)
@@ -45,7 +46,7 @@ export async function restoreTrashItem(id: string) {
        RETURNING id, name, description, unit_price, cost_price, stock, vendor_id, category, sku, created_at`,
       [data.id, data.name, data.description, data.unitPrice ?? data.unit_price, data.costPrice ?? data.cost_price, data.stock, data.vendorId ?? data.vendor_id, data.category, data.sku, data.createdAt ?? data.created_at],
     )
-    restored = result.rows[0] ?? data
+    restored = result.rows[0] ? mapDatabaseRow(result.rows[0]) : data
   } else if (item.type === "vendor") {
     const result = await query(
       `INSERT INTO vendors (id, name, email, phone, address, created_at)
@@ -54,7 +55,7 @@ export async function restoreTrashItem(id: string) {
        RETURNING id, name, email, phone, address, created_at`,
       [data.id, data.name, data.email, data.phone, data.address, data.createdAt ?? data.created_at],
     )
-    restored = result.rows[0] ?? data
+    restored = result.rows[0] ? mapDatabaseRow(result.rows[0]) : data
   } else if (item.type === "customer") {
     const result = await query(
       `INSERT INTO customers (id, name, email, phone, type, created_at)
@@ -63,7 +64,7 @@ export async function restoreTrashItem(id: string) {
        RETURNING id, name, email, phone, type, created_at`,
       [data.id, data.name, data.email, data.phone, data.type, data.createdAt ?? data.created_at],
     )
-    restored = result.rows[0] ?? data
+    restored = result.rows[0] ? mapDatabaseRow(result.rows[0]) : data
   } else if (item.type === "deal") {
     const result = await query(
       `INSERT INTO deals (id, name, description, discount_percentage, expiry_date, created_at)
@@ -72,7 +73,7 @@ export async function restoreTrashItem(id: string) {
        RETURNING id, name, description, discount_percentage, expiry_date, created_at`,
       [data.id, data.name, data.description, data.discountPercentage ?? data.discount_percentage, data.expiryDate ?? data.expiry_date, data.createdAt ?? data.created_at],
     )
-    restored = result.rows[0] ?? data
+    restored = result.rows[0] ? mapDatabaseRow(result.rows[0]) : data
   } else if (item.type === "invoice") {
     const result = await query(
       `INSERT INTO invoices (id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost, total_profit, profit_percentage, created_at, currency, status)
@@ -94,7 +95,7 @@ export async function restoreTrashItem(id: string) {
         data.status,
       ],
     )
-    restored = result.rows[0] ?? data
+    restored = result.rows[0] ? { ...mapDatabaseRow(result.rows[0]), id: mapDatabaseRow(result.rows[0]).trackingId || mapDatabaseRow(result.rows[0]).id } : data
   }
 
   await query(`DELETE FROM trash_items WHERE id = $1`, [id])
