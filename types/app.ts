@@ -77,7 +77,24 @@ export interface Customer {
   name: string
   email: string
   phone: string
+  address?: string
   type: "frequent" | "new" // Categorize customers
+  createdAt: string
+}
+
+export interface PostOfficeRecord {
+  id: string
+  customerName: string
+  customerAddress: string
+  senderAddress: string
+  phone: string
+  complaintDetails: string
+  complaintDate: string
+  vppEnabled: boolean
+  vppReceived: number
+  invoiceNumber: string
+  invoiceAmount: number
+  invoiceDate: string
   createdAt: string
 }
 

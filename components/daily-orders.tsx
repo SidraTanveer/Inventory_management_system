@@ -6,7 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { Invoice, Product, User, Customer } from "@/types/app"
+import type { Invoice, Product, Customer } from "@/types/app"
+import type { User } from "@/types/auth"
 import { formatCurrency } from "@/lib/utils"
 import { Search, Calendar, Download, Eye, Edit, Trash2, Plus, CheckCircle } from "lucide-react"
 import { InvoiceCreateDialog } from "@/components/invoice-create-dialog"
@@ -14,7 +15,7 @@ import { generateDailyOrdersPDF } from "@/components/daily-orders-pdf-generator"
 import { exportDailyOrdersToExcel } from "@/lib/excel-utils"
 import { savePDFToDatabase } from "@/lib/pdf-utils"
 import { useToast } from "@/hooks/use-toast"
-import { buildSearchableCustomers, getKeywordSuggestions } from "@/lib/search-utils"
+import { buildSearchableCustomers, getKeywordSuggestions, normalizeSearchText, searchMatchesAny } from "@/lib/search-utils"
 import { formatDate, formatPakistanTime, getCurrentDate, toPakistanDateKey } from "@/lib/utils"
 
 // Helper ⚡
@@ -48,7 +49,7 @@ interface DailyOrdersProps {
   onViewInvoice: (invoice: Invoice) => void
   onEditInvoice: (invoice: Invoice) => void
   onDeleteInvoice: (invoiceId: string) => void
-  onCreateInvoice: (invoice: Omit<Invoice, "id" | "createdAt" | "updatedAt">) => void
+  onCreateInvoice: (invoice: Omit<Invoice, "id" | "createdAt"> & { createdAt?: string }) => void
   onDownloadPdf: (invoice: Invoice) => void
   onDownloadCustomerInvoices: (customerName: string) => void
   onMarkInvoiceAsPaid: (invoiceId: string) => void
@@ -107,6 +108,13 @@ export function DailyOrders({
     return Array.from(merged.values())
   }, [dailyOrdersFromDb, invoices])
 
+  const handleDeleteInvoice = (invoiceId: string) => {
+    setDailyOrdersFromDb((current) =>
+      current.filter((invoice) => invoice.id !== invoiceId && invoice.trackingId !== invoiceId),
+    )
+    onDeleteInvoice(invoiceId)
+  }
+
   // Keep customer search always up-to-date by merging saved customers with invoice customers.
   const searchableCustomers = useMemo(() => {
     return buildSearchableCustomers(customers, mergedInvoices)
@@ -131,16 +139,15 @@ export function DailyOrders({
 
     // Filter by search term
     if (searchTerm) {
-      const lowerCaseSearchTerm = searchTerm.toLowerCase()
-      filtered = filtered.filter(
-        (invoice) =>
-          (invoice.id || "").toLowerCase().includes(lowerCaseSearchTerm) ||
-          (invoice.customerName || "").toLowerCase().includes(lowerCaseSearchTerm) ||
-          (invoice.customerEmail || "").toLowerCase().includes(lowerCaseSearchTerm) ||
-          (Array.isArray(invoice.items)
-            ? invoice.items.some((item) => (item.productName || "").toLowerCase().includes(lowerCaseSearchTerm))
-            : false),
-      )
+      const normalizedSearchTerm = normalizeSearchText(searchTerm)
+      filtered = filtered.filter((invoice) => {
+        if (searchMatchesAny([invoice.id, invoice.customerName, invoice.customerEmail], normalizedSearchTerm)) {
+          return true
+        }
+        return (invoice.items || []).some((item) =>
+          searchMatchesAny([item.productName], normalizedSearchTerm),
+        )
+      })
     }
 
     return filtered.sort((a, b) => {
@@ -463,7 +470,7 @@ export function DailyOrders({
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => onDeleteInvoice(invoice.id)}
+                                onClick={() => handleDeleteInvoice(invoice.id)}
                                 className="border-red-200 text-red-600 hover:bg-red-50"
                               >
                                 <Trash2 className="h-4 w-4" />

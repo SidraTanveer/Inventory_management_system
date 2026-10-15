@@ -43,6 +43,7 @@ import { LandingPage } from "@/components/landing-page"
 import { GuestLoginForm } from "@/components/guest-login-form"
 import { TrashManagement } from "@/components/trash-management"
 import { CustomerManagement } from "@/components/customer-management"
+import { PostOfficeManagement } from "@/components/post-office-management"
 import { DailyOrders } from "@/components/daily-orders"
 import { GlobalSearch } from "@/components/global-search"
 import { PDFUploadParser } from "@/components/pdf-upload-parser"
@@ -50,7 +51,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 // import { v4 as generateId } from "uuid"
 
 import type { User as AuthUser, LoginRequest } from "@/types/auth"
-import type { Product, Invoice, Deal, TrashItem, Customer } from "@/types/app"
+import type { Product, Invoice, Deal, TrashItem, Customer, PostOfficeRecord } from "@/types/app"
 
 import {
   formatCurrency,
@@ -444,12 +445,15 @@ type ActiveTab =
   | "guests"
   | "vendors"
   | "customers"
+  | "post-office"
   | "settings"
   | "customer-profit"
   | "deals"
   | "trash"
   | "daily-orders"
   | "login-requests"
+  | "login"
+  | "forgot-password"
 
 function DashboardPageContent() {
   const beautyQuotes = [
@@ -605,6 +609,24 @@ function DashboardPageContent() {
     }
   })
 
+  const [postOfficeRecords, setPostOfficeRecords] = useState<PostOfficeRecord[]>(() => {
+    try {
+      const loaded = loadFromLocalStorage("ims_post_office_records")
+      return Array.isArray(loaded) ? loaded : []
+    } catch (err) {
+      console.error("[v0] Error loading post office records:", err)
+      return []
+    }
+  })
+
+  const persistPostOfficeRecords = (updater: (prev: PostOfficeRecord[]) => PostOfficeRecord[]) => {
+    setPostOfficeRecords((prev) => {
+      const nextRecords = updater(prev)
+      saveToLocalStorage("ims_post_office_records", nextRecords)
+      return nextRecords
+    })
+  }
+
   const [vendors, setVendors] = useState<Vendor[]>(() => {
     try {
       const loaded = loadFromLocalStorage("ims_vendors")
@@ -670,6 +692,12 @@ function DashboardPageContent() {
   }, [customers])
 
   useEffect(() => {
+    if (Array.isArray(postOfficeRecords)) {
+      saveToLocalStorage("ims_post_office_records", postOfficeRecords)
+    }
+  }, [postOfficeRecords])
+
+  useEffect(() => {
     if (Array.isArray(vendors)) {
       saveToLocalStorage("ims_vendors", vendors)
     }
@@ -689,27 +717,35 @@ function DashboardPageContent() {
 
   useEffect(() => {
     const loadDataFromServer = async () => {
-      try {
-        // Load products
-        const prodRes = await fetch('/api/products')
-        if (prodRes.ok) {
-          const prodData = await prodRes.json()
-          if (Array.isArray(prodData)) setProducts((prev) => mergeProductsById(normalizeProducts(prodData), prev))
+      const loadIfNeeded = async (
+        key: string,
+        request: () => Promise<Response>,
+        apply: (data: any) => void,
+      ) => {
+        if (hasStoredLocalData(key)) {
+          return
         }
-      } catch (error) {
-        console.warn('Unable to load products from server:', error)
+
+        try {
+          const res = await request()
+          if (res.ok) {
+            const data = await res.json()
+            if (Array.isArray(data)) {
+              apply(data)
+            }
+          }
+        } catch (error) {
+          console.warn(`Unable to load ${key} from server:`, error)
+        }
       }
 
-      try {
-        // Load invoices
-        const invRes = await fetch('/api/invoices')
-        if (invRes.ok) {
-          const invData = await invRes.json()
-          if (Array.isArray(invData)) setInvoices(dedupeInvoices(invData))
-        }
-      } catch (error) {
-        console.warn('Unable to load invoices from server:', error)
-      }
+      await loadIfNeeded("ims_products", () => fetch('/api/products'), (prodData) => {
+        setProducts((prev) => mergeProductsById(normalizeProducts(prodData), prev))
+      })
+
+      await loadIfNeeded("ims_invoices", () => fetch('/api/invoices'), (invData) => {
+        setInvoices(dedupeInvoices(invData))
+      })
 
       try {
         const dailyRes = await fetch('/api/daily-orders')
@@ -723,49 +759,30 @@ function DashboardPageContent() {
         console.warn('Unable to load daily orders from server:', error)
       }
 
-      try {
-        // Load customers
-        const custRes = await fetch('/api/customers')
-        if (custRes.ok) {
-          const custData = await custRes.json()
-          if (Array.isArray(custData)) setCustomers((prev) => mergeCustomers(custData, prev))
-        }
-      } catch (error) {
-        console.warn('Unable to load customers from server:', error)
+      await loadIfNeeded("ims_customers", () => fetch('/api/customers'), (custData) => {
+        setCustomers((prev) => mergeCustomers(custData, prev))
+      })
+
+      const storedPostOfficeRecords = loadFromLocalStorage("ims_post_office_records")
+      if (Array.isArray(storedPostOfficeRecords) && storedPostOfficeRecords.length > 0) {
+        setPostOfficeRecords(storedPostOfficeRecords)
+      } else {
+        await loadIfNeeded("ims_post_office_records", () => fetch('/api/post-office'), (postData) => {
+          setPostOfficeRecords(Array.isArray(postData) ? postData : [])
+        })
       }
 
-      try {
-        // Load vendors
-        const vendRes = await fetch('/api/vendors')
-        if (vendRes.ok) {
-          const vendData = await vendRes.json()
-          if (Array.isArray(vendData)) setVendors((prev) => mergeVendors(vendData, prev))
-        }
-      } catch (error) {
-        console.warn('Unable to load vendors from server:', error)
-      }
+      await loadIfNeeded("ims_vendors", () => fetch('/api/vendors'), (vendData) => {
+        setVendors((prev) => mergeVendors(vendData, prev))
+      })
 
-      try {
-        // Load deals
-        const dealRes = await fetch('/api/deals')
-        if (dealRes.ok) {
-          const dealData = await dealRes.json()
-          if (Array.isArray(dealData)) setDeals((prev) => mergeDeals(dealData, prev))
-        }
-      } catch (error) {
-        console.warn('Unable to load deals from server:', error)
-      }
+      await loadIfNeeded("ims_deals", () => fetch('/api/deals'), (dealData) => {
+        setDeals((prev) => mergeDeals(dealData, prev))
+      })
 
-      try {
-        // Load trash
-        const trashRes = await fetch('/api/trash')
-        if (trashRes.ok) {
-          const trashData = await trashRes.json()
-          if (Array.isArray(trashData)) setTrashItems(trashData)
-        }
-      } catch (error) {
-        console.warn('Unable to load trash from server:', error)
-      }
+      await loadIfNeeded("ims_trash", () => fetch('/api/trash'), (trashData) => {
+        setTrashItems(trashData)
+      })
     }
 
     loadDataFromServer()
@@ -850,6 +867,19 @@ function DashboardPageContent() {
   const handleGuestLoginSuccess = () => {
     setShowGuestLogin(false)
     setActiveTab("dashboard")
+  }
+
+  const hasStoredLocalData = (key: string) => {
+    try {
+      const raw = localStorage.getItem(key)
+      if (!raw) return false
+      const parsed = JSON.parse(raw)
+      const values = parsed && typeof parsed === "object" && "data" in parsed ? parsed.data : parsed
+      return Array.isArray(values) ? values.length > 0 : Boolean(values)
+    } catch (error) {
+      console.warn(`Unable to read local cache for ${key}:`, error)
+      return false
+    }
   }
 
   const handleDataSync = (syncedData: any) => {
@@ -1036,7 +1066,7 @@ function DashboardPageContent() {
     }
   }
 
-  const handleCreateInvoice = (newInvoice: Omit<Invoice, "id" | "createdAt" | "updatedAt">) => {
+  const handleCreateInvoice = (newInvoice: Omit<Invoice, "id" | "createdAt"> & { createdAt?: string }) => {
     console.log("[v0] Creating invoice with date:", newInvoice.createdAt || "no createdAt")
 
     const invoiceDateString = newInvoice.createdAt || getCurrentDate()
@@ -1195,7 +1225,9 @@ function DashboardPageContent() {
   }
 
   const handleMarkInvoiceAsPaid = (invoiceId: string) => {
-    const updatedInvoices = invoices.map((inv) => (inv.id === invoiceId ? { ...inv, status: "completed" } : inv))
+    const updatedInvoices: Invoice[] = invoices.map((inv) =>
+      inv.id === invoiceId ? ({ ...inv, status: "completed" } as Invoice) : inv,
+    )
     setInvoices(updatedInvoices)
     toast({
       title: "Invoice Marked as Paid",
@@ -1609,6 +1641,97 @@ function DashboardPageContent() {
     create()
   }
 
+  const handleUpsertCustomerFromPostOfficeRecord = (record: PostOfficeRecord) => {
+    const normalizedName = record.customerName.trim()
+    const normalizedPhone = record.phone.trim()
+    const normalizedAddress = record.customerAddress.trim()
+    const generatedEmail = normalizedPhone
+      ? `${normalizedPhone.replace(/\D/g, "")}@customer.local`
+      : `${normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, ".") || "customer"}@customer.local`
+
+    const existingCustomer = customers.find((customer) => {
+      const sameName = customer.name.toLowerCase() === normalizedName.toLowerCase()
+      const samePhone = customer.phone.replace(/\D/g, "") === normalizedPhone.replace(/\D/g, "")
+      const sameEmail = customer.email.toLowerCase() === generatedEmail.toLowerCase()
+      return sameName || samePhone || sameEmail
+    })
+
+    const customerPayload: Customer = {
+      id: existingCustomer?.id || generateId(),
+      name: normalizedName,
+      email: existingCustomer?.email || generatedEmail,
+      phone: normalizedPhone,
+      address: normalizedAddress || existingCustomer?.address || "",
+      type: existingCustomer?.type || "new",
+      createdAt: existingCustomer?.createdAt || getCurrentDate(),
+    }
+
+    if (existingCustomer) {
+      handleUpdateCustomer(customerPayload)
+      return
+    }
+
+    handleAddCustomer(customerPayload)
+  }
+
+  const handleAddPostOfficeRecord = (newRecord: PostOfficeRecord) => {
+    handleUpsertCustomerFromPostOfficeRecord(newRecord)
+
+    const create = async () => {
+      try {
+        const res = await fetch('/api/post-office', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newRecord),
+        })
+        const json = await res.json()
+        if (json.success && json.record) {
+          persistPostOfficeRecords((prev) => [json.record, ...prev])
+          return
+        }
+      } catch (e) {
+        console.warn('Post office record create failed, falling back to local state', e)
+      }
+      persistPostOfficeRecords((prev) => [newRecord, ...prev])
+    }
+    create()
+  }
+
+  const handleUpdatePostOfficeRecord = (updatedRecord: PostOfficeRecord) => {
+    handleUpsertCustomerFromPostOfficeRecord(updatedRecord)
+
+    const update = async () => {
+      try {
+        const res = await fetch('/api/post-office', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedRecord),
+        })
+        const json = await res.json()
+        if (json.success && json.record) {
+          persistPostOfficeRecords((prev) => prev.map((record) => (record.id === updatedRecord.id ? json.record : record)))
+          return
+        }
+      } catch (e) {
+        console.warn('Post office record update failed, falling back to local state', e)
+      }
+      persistPostOfficeRecords((prev) => prev.map((record) => (record.id === updatedRecord.id ? updatedRecord : record)))
+    }
+    update()
+  }
+
+  const handleDeletePostOfficeRecord = (recordId: string) => {
+    const remove = async () => {
+      try {
+        await fetch(`/api/post-office?id=${recordId}`, { method: 'DELETE' })
+      } catch (e) {
+        console.warn('Failed to delete post office record on server', e)
+      }
+      persistPostOfficeRecords((prev) => prev.filter((record) => record.id !== recordId))
+    }
+    remove()
+  }
+
   const handleUpdateCustomer = (updatedCustomer: Customer) => {
     const update = async () => {
       try {
@@ -1806,6 +1929,16 @@ function DashboardPageContent() {
             onClick={() => setActiveTab("customers")}
           >
             <UserRound className="mr-2 h-4 w-4" /> Customers
+          </Button>
+          <Button
+            variant={activeTab === "post-office" ? "secondary" : "ghost"}
+            className={cn(
+              "w-full justify-start",
+              activeTab === "post-office" && "bg-purple-600 text-white hover:bg-purple-700",
+            )}
+            onClick={() => setActiveTab("post-office")}
+          >
+            <Package className="mr-2 h-4 w-4" /> Post Office
           </Button>
           <Button
             variant={activeTab === "deals" ? "secondary" : "ghost"}
@@ -2026,6 +2159,16 @@ function DashboardPageContent() {
             onDeleteCustomer={handleDeleteCustomer}
           />
         )}
+        {activeTab === "post-office" && (
+          <PostOfficeManagement
+            records={postOfficeRecords}
+            customers={customers}
+            onAddRecord={handleAddPostOfficeRecord}
+            onUpdateRecord={handleUpdatePostOfficeRecord}
+            onDeleteRecord={handleDeletePostOfficeRecord}
+            onAddCustomerFromSlip={handleUpsertCustomerFromPostOfficeRecord}
+          />
+        )}
         {activeTab === "deals" && (
           <DealManagement
             deals={deals}
@@ -2112,7 +2255,7 @@ function DashboardPageContent() {
         deals={deals}
         trashItems={trashItems}
         onNavigate={(tab) => {
-          setActiveTab(tab)
+          setActiveTab(tab as ActiveTab)
           setIsGlobalSearchOpen(false)
         }}
         onViewInvoice={(invoice) => {

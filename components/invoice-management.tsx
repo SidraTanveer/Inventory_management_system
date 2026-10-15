@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { getKeywordSuggestions } from "@/lib/search-utils"
+import { getKeywordSuggestions, normalizeSearchText } from "@/lib/search-utils"
 import {
   FileText,
   Plus,
@@ -87,12 +87,13 @@ export function InvoiceManagement({
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
 
   const filteredInvoices = useMemo(() => {
+    const normalizedSearchTerm = normalizeSearchText(searchTerm)
     return invoices.filter((invoice) => {
       const matchesSearch =
-        invoice.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.customerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (invoice.trackingId && invoice.trackingId.toLowerCase().includes(searchTerm.toLowerCase()))
+        !normalizedSearchTerm ||
+        [invoice.id, invoice.customerName, invoice.customerEmail, invoice.trackingId].some((value) =>
+          normalizeSearchText(value).includes(normalizedSearchTerm),
+        )
 
       const matchesStatus = statusFilter === "all" || invoice.status === statusFilter
 

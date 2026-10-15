@@ -38,9 +38,31 @@ CREATE TABLE IF NOT EXISTS customers (
   name TEXT NOT NULL,
   email TEXT,
   phone TEXT,
+  address TEXT,
   type TEXT NOT NULL CHECK (type IN ('frequent', 'new')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE IF EXISTS customers ADD COLUMN IF NOT EXISTS address TEXT;
+
+-- Post Office parcel and complaint tracking
+CREATE TABLE IF NOT EXISTS post_office_records (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_name TEXT NOT NULL,
+  customer_address TEXT NOT NULL,
+  sender_address TEXT NOT NULL,
+  phone TEXT,
+  complaint_details TEXT,
+  complaint_date DATE,
+  vpp_received INTEGER NOT NULL DEFAULT 0,
+  invoice_number TEXT,
+  invoice_amount NUMERIC(18,4) NOT NULL DEFAULT 0,
+  invoice_date DATE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE IF EXISTS post_office_records
+  ADD COLUMN IF NOT EXISTS vpp_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- Product inventory
 CREATE TABLE IF NOT EXISTS products (
@@ -142,4 +164,3 @@ CREATE TABLE IF NOT EXISTS pdfs (
 CREATE INDEX IF NOT EXISTS idx_pdfs_type ON pdfs(type);
 CREATE INDEX IF NOT EXISTS idx_pdfs_entity ON pdfs(entity_id, entity_type);
 CREATE INDEX IF NOT EXISTS idx_pdfs_created_at ON pdfs(created_at DESC);
-

@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast"
 import { generateCustomersPDF } from "@/components/data-export-pdf-generator"
 import { exportCustomersToExcel, importCustomersFromExcel } from "@/lib/excel-utils"
 import { savePDFToDatabase } from "@/lib/pdf-utils"
-import { getKeywordSuggestions } from "@/lib/search-utils"
+import { getKeywordSuggestions, normalizeSearchText, searchMatchesAny } from "@/lib/search-utils"
 
 interface CustomerManagementProps {
   customers: Customer[]
@@ -47,7 +47,9 @@ export function CustomerManagement({
   const [customerName, setCustomerName] = useState("")
   const [customerEmail, setCustomerEmail] = useState("")
   const [customerPhone, setCustomerPhone] = useState("")
+  const [customerAddress, setCustomerAddress] = useState("")
   const [customerType, setCustomerType] = useState<"frequent" | "new">("new")
+  const [customerLookupTerm, setCustomerLookupTerm] = useState("")
   const { toast } = useToast()
 
   const filteredCustomers = useMemo(() => {
@@ -57,15 +59,12 @@ export function CustomerManagement({
       filtered = filtered.filter((customer) => customer.type === filterType)
     }
 
-    if (!searchTerm) {
+    const normalizedSearchTerm = normalizeSearchText(searchTerm)
+    if (!normalizedSearchTerm) {
       return filtered
     }
-    const lowerCaseSearchTerm = searchTerm.toLowerCase()
-    return filtered.filter(
-      (customer) =>
-        customer.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-        customer.email.toLowerCase().includes(lowerCaseSearchTerm) ||
-        customer.phone.toLowerCase().includes(lowerCaseSearchTerm),
+    return filtered.filter((customer) =>
+      searchMatchesAny([customer.name, customer.email, customer.phone], normalizedSearchTerm),
     )
   }, [customers, searchTerm, filterType])
 
@@ -78,21 +77,41 @@ export function CustomerManagement({
     )
   }, [customers, searchTerm])
 
+  const recommendedCustomers = useMemo(() => {
+    const query = normalizeSearchText(customerLookupTerm)
+    if (!query) return customers.slice(0, 5)
+
+    return customers.filter((customer) => searchMatchesAny([customer.name, customer.email, customer.phone], query))
+  }, [customers, customerLookupTerm])
+
   const handleOpenDialog = (customer?: Customer) => {
     if (customer) {
       setEditingCustomer(customer)
       setCustomerName(customer.name)
       setCustomerEmail(customer.email)
       setCustomerPhone(customer.phone)
+      setCustomerAddress(customer.address || "")
       setCustomerType(customer.type)
+      setCustomerLookupTerm(customer.name)
     } else {
       setEditingCustomer(null)
       setCustomerName("")
       setCustomerEmail("")
       setCustomerPhone("")
+      setCustomerAddress("")
       setCustomerType("new")
+      setCustomerLookupTerm("")
     }
     setIsDialogOpen(true)
+  }
+
+  const handleUseRecommendedCustomer = (customer: Customer) => {
+    setCustomerLookupTerm(customer.name)
+    setCustomerName(customer.name)
+    setCustomerEmail(customer.email)
+    setCustomerPhone(customer.phone)
+    setCustomerAddress(customer.address || "")
+    setCustomerType(customer.type)
   }
 
   const handleSaveCustomer = () => {
@@ -111,6 +130,7 @@ export function CustomerManagement({
         name: customerName,
         email: customerEmail,
         phone: customerPhone,
+        address: customerAddress,
         type: customerType,
       })
       toast({ title: "Customer Updated", description: `${customerName} has been updated.` })
@@ -120,6 +140,7 @@ export function CustomerManagement({
         name: customerName,
         email: customerEmail,
         phone: customerPhone,
+        address: customerAddress,
         type: customerType,
         createdAt: getCurrentDate(),
       })
@@ -300,6 +321,7 @@ export function CustomerManagement({
                     <TableHead className="font-semibold text-gray-700">Name</TableHead>
                     <TableHead className="font-semibold text-gray-700">Email</TableHead>
                     <TableHead className="font-semibold text-gray-700">Phone</TableHead>
+                    <TableHead className="font-semibold text-gray-700">Address</TableHead>
                     <TableHead className="font-semibold text-gray-700">Type</TableHead>
                     <TableHead className="font-semibold text-gray-700">Created At</TableHead>
                     <TableHead className="font-semibold text-gray-700">Actions</TableHead>
@@ -311,6 +333,7 @@ export function CustomerManagement({
                       <TableCell className="font-medium text-blue-700">{customer.name}</TableCell>
                       <TableCell className="text-gray-600">{customer.email}</TableCell>
                       <TableCell className="text-gray-600">{customer.phone}</TableCell>
+                      <TableCell className="text-gray-600 max-w-[220px] truncate">{customer.address || "—"}</TableCell>
                       <TableCell>
                         <Badge
                           variant="secondary"
@@ -374,6 +397,38 @@ export function CustomerManagement({
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
+              <Label htmlFor="customerLookup">Search customer</Label>
+              <Input
+                id="customerLookup"
+                placeholder="Type first letter or customer name..."
+                value={customerLookupTerm}
+                onChange={(e) => setCustomerLookupTerm(e.target.value)}
+                list="customer-recommendations"
+              />
+              <datalist id="customer-recommendations">
+                {recommendedCustomers.map((customer) => (
+                  <option key={customer.id} value={customer.name} />
+                ))}
+              </datalist>
+
+              {recommendedCustomers.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {recommendedCustomers.slice(0, 5).map((customer) => (
+                    <Button
+                      key={customer.id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleUseRecommendedCustomer(customer)}
+                    >
+                      {customer.name}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="customerName">Name</Label>
               <Input id="customerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
             </div>
@@ -389,6 +444,15 @@ export function CustomerManagement({
             <div className="space-y-2">
               <Label htmlFor="customerPhone">Phone</Label>
               <Input id="customerPhone" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="customerAddress">Address</Label>
+              <Input
+                id="customerAddress"
+                value={customerAddress}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+                placeholder="House / area / city"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="customerType">Type</Label>

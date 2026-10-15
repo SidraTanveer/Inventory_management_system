@@ -2,8 +2,8 @@
 
 import { useAuth } from "@/hooks/useAuth"
 import { LoginForm } from "./login-form"
-import type { User } from "@/types/user" // Import User type
-import type React from "react" // Import React
+import type { User } from "@/types/auth"
+import type React from "react"
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -14,7 +14,7 @@ export function ProtectedRoute({ children, requiredPermission }: ProtectedRouteP
   const { user } = useAuth()
 
   if (!user) {
-    return <LoginForm onLoginSuccess={() => {}} onForgotPassword={() => {}} />
+    return <LoginForm onLoginSuccess={() => {}} onForgotPassword={() => {}} onGuestLogin={() => {}} guestUsers={[]} />
   }
 
   if (requiredPermission && !user.permissions[requiredPermission]) {

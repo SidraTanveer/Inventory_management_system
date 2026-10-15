@@ -59,7 +59,7 @@ export function PDFUploadParser({
 
       // Detect data type and parse accordingly
       let dataType = "unknown"
-      let parsedData = []
+      let parsedData: any[] = []
 
       if (text.includes("Product") || text.includes("SKU")) {
         dataType = "products"

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Badge } from "@/components/ui/badge"
 import type { Deal } from "@/types/app"
 import { formatDate, getCurrentDate } from "@/lib/utils"
+import { normalizeSearchText, searchMatchesAny } from "@/lib/search-utils"
 import { Search, Gift, Plus, Edit, Trash2, Download, Percent } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -43,13 +44,9 @@ export function DealManagement({
   const { toast } = useToast()
 
   const filteredDeals = useMemo(() => {
-    if (!searchTerm) return deals
-    const lowerCaseSearchTerm = searchTerm.toLowerCase()
-    return deals.filter(
-      (deal) =>
-        deal.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-        deal.description.toLowerCase().includes(lowerCaseSearchTerm),
-    )
+    const normalizedSearchTerm = normalizeSearchText(searchTerm)
+    if (!normalizedSearchTerm) return deals
+    return deals.filter((deal) => searchMatchesAny([deal.name, deal.description], normalizedSearchTerm))
   }, [deals, searchTerm])
 
   const dealStats = useMemo(() => {

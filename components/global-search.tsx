@@ -68,9 +68,26 @@ export function GlobalSearch({
 }: GlobalSearchProps) {
   const [searchTerm, setSearchTerm] = useState("")
 
+  const activeInvoices = useMemo(() => {
+    const deletedInvoiceIds = new Set(
+      trashItems
+        .filter((item) => item.type === "invoice")
+        .flatMap((item) => {
+          const invoice = item.data as Invoice
+          return [item.originalId, invoice.id, invoice.trackingId].filter(
+            (id): id is string => Boolean(id),
+          )
+        }),
+    )
+
+    return invoices.filter(
+      (invoice) => ![invoice.id, invoice.trackingId].some((id) => id && deletedInvoiceIds.has(id)),
+    )
+  }, [invoices, trashItems])
+
   const searchableCustomers = useMemo(() => {
-    return buildSearchableCustomers(customers, invoices)
-  }, [customers, invoices])
+    return buildSearchableCustomers(customers, activeInvoices)
+  }, [customers, activeInvoices])
 
   // Navigation items
   const navigationItems = [
@@ -119,7 +136,7 @@ export function GlobalSearch({
         (product) => product.sku,
         (product) => product.category,
       ]),
-      invoices: searchAndRank(invoices, term, [
+      invoices: searchAndRank(activeInvoices, term, [
         (invoice) => invoice.id,
         (invoice) => invoice.customerName,
         (invoice) => invoice.customerEmail,
@@ -134,13 +151,13 @@ export function GlobalSearch({
         (customer) => customer.phone,
       ]),
       deals: searchAndRank(deals, term, [(deal) => deal.name, (deal) => deal.description]),
-      trash: searchAndRank(trashItems, term, [
+      trash: searchAndRank(trashItems.filter((item) => item.type !== "invoice"), term, [
         (item) => (item.data as any).name,
         (item) => item.originalId,
         (item) => item.type,
       ]),
     }
-  }, [searchTerm, products, invoices, users, guestUsers, vendors, searchableCustomers, deals, trashItems])
+  }, [searchTerm, products, activeInvoices, users, guestUsers, vendors, searchableCustomers, deals, trashItems])
 
   const totalResults = Object.values(searchResults).reduce((sum, results) => sum + results.length, 0)
 
@@ -152,7 +169,7 @@ export function GlobalSearch({
       4,
     )
     const invoiceSuggestions = getKeywordSuggestions(
-      invoices,
+      activeInvoices,
       searchTerm,
       [(invoice) => invoice.id, (invoice) => invoice.trackingId, (invoice) => invoice.customerName],
       4,
@@ -166,7 +183,7 @@ export function GlobalSearch({
     )
 
     return [...navSuggestions, ...invoiceSuggestions, ...productSuggestions, ...customerSuggestions].slice(0, 12)
-  }, [searchTerm, navigationItems, invoices, products, searchableCustomers])
+  }, [searchTerm, navigationItems, activeInvoices, products, searchableCustomers])
 
   // Handle keyboard navigation
   useEffect(() => {
