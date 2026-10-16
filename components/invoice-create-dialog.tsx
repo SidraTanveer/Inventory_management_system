@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { formatCurrency, getCurrentDate } from "@/lib/utils"
-import { buildSearchableCustomers, getKeywordSuggestions, searchAndRank } from "@/lib/search-utils"
+import { buildSearchableCustomers, searchAndRank } from "@/lib/search-utils"
+import { useKeyboardSelection } from "@/hooks/use-keyboard-selection"
 import { Plus, Minus, Search, X, Hash, RefreshCw, User, Calendar } from "lucide-react"
 import type { Product, Invoice, InvoiceItem, Customer } from "@/types/app"
 
@@ -77,33 +78,6 @@ export function InvoiceCreateDialog({
     (invoice) => invoice.customerEmail,
     (invoice) => invoice.trackingId,
   ])
-
-  const customerSuggestions = useMemo(() => {
-    return getKeywordSuggestions(
-      searchableCustomers,
-      customerSearchTerm,
-      [(customer) => customer.name, (customer) => customer.email, (customer) => customer.phone],
-      10,
-    )
-  }, [searchableCustomers, customerSearchTerm])
-
-  const invoiceSuggestions = useMemo(() => {
-    return getKeywordSuggestions(
-      existingInvoices,
-      invoiceSearchTerm,
-      [
-        (invoice) => invoice.id,
-        (invoice) => invoice.trackingId,
-        (invoice) => invoice.customerName,
-        (invoice) => invoice.customerEmail,
-      ],
-      10,
-    )
-  }, [existingInvoices, invoiceSearchTerm])
-
-  const productSuggestions = useMemo(() => {
-    return getKeywordSuggestions(products, productSearchTerm, [(product) => product.name, (product) => product.sku], 10)
-  }, [products, productSearchTerm])
 
   const generateTrackingId = () => {
     const prefix = "TRK"
@@ -187,6 +161,10 @@ export function InvoiceCreateDialog({
       description: `Customer information from invoice ${invoice.id} has been auto-filled.`,
     })
   }
+
+  const productSelection = useKeyboardSelection(filteredProducts, addItem)
+  const customerSelection = useKeyboardSelection(filteredCustomers, selectCustomer)
+  const invoiceSelection = useKeyboardSelection(filteredInvoices, selectInvoice)
 
   const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
   const totalCost = items.reduce((sum, item) => sum + item.quantity * item.costPrice, 0)
@@ -367,20 +345,36 @@ export function InvoiceCreateDialog({
                   <Input
                     placeholder="Search customers by name or email..."
                     value={customerSearchTerm}
-                    onChange={(e) => setCustomerSearchTerm(e.target.value)}
-                    list="invoice-create-customer-suggestions"
+                    onChange={(e) => {
+                      setCustomerSearchTerm(e.target.value)
+                      customerSelection.reset()
+                    }}
+                    onKeyDown={customerSelection.onKeyDown}
+                    aria-activedescendant={
+                      customerSelection.activeIndex >= 0
+                        ? `invoice-create-customer-option-${customerSelection.activeIndex}`
+                        : undefined
+                    }
+                    aria-controls="invoice-create-customer-options"
+                    aria-autocomplete="list"
+                    role="combobox"
                     className="mb-3 border-purple-300 focus:border-purple-500 focus:ring-purple-500"
                   />
-                  <datalist id="invoice-create-customer-suggestions">
-                    {customerSuggestions.map((suggestion) => (
-                      <option key={suggestion} value={suggestion} />
-                    ))}
-                  </datalist>
-                  <div className="max-h-40 overflow-y-auto space-y-2">
-                    {filteredCustomers.map((customer) => (
+                  <p className="mb-2 text-xs text-gray-500">Use Up/Down arrows to choose a customer, then press Enter.</p>
+                  <div
+                    id="invoice-create-customer-options"
+                    role="listbox"
+                    className="max-h-40 overflow-y-auto space-y-2"
+                  >
+                    {filteredCustomers.map((customer, index) => (
                       <div
+                        id={`invoice-create-customer-option-${index}`}
+                        role="option"
+                        aria-selected={customerSelection.activeIndex === index}
                         key={customer.id}
-                        className="p-3 border-2 border-purple-200 rounded cursor-pointer hover:bg-white hover:border-purple-400 transition-all bg-white"
+                        className={`p-3 border-2 border-purple-200 rounded cursor-pointer hover:bg-white hover:border-purple-400 transition-all bg-white ${
+                          customerSelection.activeIndex === index ? "border-purple-500 bg-white" : ""
+                        }`}
                         onClick={() => selectCustomer(customer)}
                       >
                         <div className="font-medium text-gray-900">{customer.name}</div>
@@ -400,20 +394,36 @@ export function InvoiceCreateDialog({
                   <Input
                     placeholder="Search invoices by ID, customer name, or email..."
                     value={invoiceSearchTerm}
-                    onChange={(e) => setInvoiceSearchTerm(e.target.value)}
-                    list="invoice-create-invoice-suggestions"
+                    onChange={(e) => {
+                      setInvoiceSearchTerm(e.target.value)
+                      invoiceSelection.reset()
+                    }}
+                    onKeyDown={invoiceSelection.onKeyDown}
+                    aria-activedescendant={
+                      invoiceSelection.activeIndex >= 0
+                        ? `invoice-create-invoice-option-${invoiceSelection.activeIndex}`
+                        : undefined
+                    }
+                    aria-controls="invoice-create-invoice-options"
+                    aria-autocomplete="list"
+                    role="combobox"
                     className="mb-3 border-purple-300 focus:border-purple-500 focus:ring-purple-500"
                   />
-                  <datalist id="invoice-create-invoice-suggestions">
-                    {invoiceSuggestions.map((suggestion) => (
-                      <option key={suggestion} value={suggestion} />
-                    ))}
-                  </datalist>
-                  <div className="max-h-40 overflow-y-auto space-y-2">
+                  <p className="mb-2 text-xs text-gray-500">Use Up/Down arrows to choose an invoice, then press Enter.</p>
+                  <div
+                    id="invoice-create-invoice-options"
+                    role="listbox"
+                    className="max-h-40 overflow-y-auto space-y-2"
+                  >
                     {filteredInvoices.map((invoice, index) => (
                       <div
+                        id={`invoice-create-invoice-option-${index}`}
+                        role="option"
+                        aria-selected={invoiceSelection.activeIndex === index}
                         key={`${invoice.id || invoice.trackingId || "no-id"}-${invoice.createdAt || "no-date"}-${index}`}
-                        className="p-3 border-2 border-purple-200 rounded cursor-pointer hover:bg-white hover:border-purple-400 transition-all bg-white"
+                        className={`p-3 border-2 border-purple-200 rounded cursor-pointer hover:bg-white hover:border-purple-400 transition-all bg-white ${
+                          invoiceSelection.activeIndex === index ? "border-purple-500 bg-white" : ""
+                        }`}
                         onClick={() => selectInvoice(invoice)}
                       >
                         <div className="flex justify-between items-start">
@@ -521,21 +531,37 @@ export function InvoiceCreateDialog({
                 <Input
                   placeholder="Search products by name or SKU..."
                   value={productSearchTerm}
-                  onChange={(e) => setProductSearchTerm(e.target.value)}
-                  list="invoice-create-product-suggestions"
+                  onChange={(e) => {
+                    setProductSearchTerm(e.target.value)
+                    productSelection.reset()
+                  }}
+                  onKeyDown={productSelection.onKeyDown}
+                  aria-activedescendant={
+                    productSelection.activeIndex >= 0
+                      ? `invoice-create-product-option-${productSelection.activeIndex}`
+                      : undefined
+                  }
+                  aria-controls="invoice-create-product-options"
+                  aria-autocomplete="list"
+                  role="combobox"
                   className="border-2 border-blue-200 focus:border-blue-500 focus:ring-blue-500"
                 />
-                <datalist id="invoice-create-product-suggestions">
-                  {productSuggestions.map((suggestion) => (
-                    <option key={suggestion} value={suggestion} />
-                  ))}
-                </datalist>
+                <p className="text-xs text-gray-500">Use Up/Down arrows to choose a product, then press Enter to add it.</p>
                 {productSearchTerm && (
-                  <div className="max-h-40 overflow-y-auto border-2 border-blue-200 rounded-lg bg-blue-50">
-                    {filteredProducts.map((product) => (
+                  <div
+                    id="invoice-create-product-options"
+                    role="listbox"
+                    className="max-h-40 overflow-y-auto border-2 border-blue-200 rounded-lg bg-blue-50"
+                  >
+                    {filteredProducts.map((product, index) => (
                       <div
+                        id={`invoice-create-product-option-${index}`}
+                        role="option"
+                        aria-selected={productSelection.activeIndex === index}
                         key={product.id}
-                        className="p-3 border-b-2 border-blue-100 last:border-b-0 cursor-pointer hover:bg-white transition-colors flex justify-between items-center"
+                        className={`p-3 border-b-2 border-blue-100 last:border-b-0 cursor-pointer hover:bg-white transition-colors flex justify-between items-center ${
+                          productSelection.activeIndex === index ? "bg-white" : ""
+                        }`}
                         onClick={() => addItem(product)}
                       >
                         <div>
