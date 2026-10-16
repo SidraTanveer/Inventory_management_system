@@ -83,6 +83,7 @@ export function getDaysSince(dateString: string): number {
 // Add these two new internal helper functions at the top of the file, before `saveToLocalStorage`.
 // They will load the raw stored object with metadata.
 function _loadRawStoredData(key: string): { data: any; lastUpdated: string; version: string; deviceId: string } | null {
+  if (typeof localStorage === "undefined") return null
   try {
     const stored = localStorage.getItem(key)
     if (stored) {
@@ -105,6 +106,7 @@ function _loadRawStoredData(key: string): { data: any; lastUpdated: string; vers
 function _loadRawCloudBackupData(
   key: string,
 ): { data: any; lastUpdated: string; version: string; deviceId: string } | null {
+  if (typeof localStorage === "undefined") return null
   try {
     const cloudKey = `cloud_backup_${key}`
     const stored = localStorage.getItem(cloudKey)

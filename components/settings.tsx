@@ -20,7 +20,10 @@ interface SettingsProps {
 export function Settings({ onCurrencyChange, onDataSync }: SettingsProps) {
   const { user } = useAuth()
   const { toast } = useToast()
-  const [selectedCurrency, setSelectedCurrency] = useState("PKR")
+  const [selectedCurrency, setSelectedCurrency] = useState(() => {
+    if (typeof window === "undefined") return "PKR"
+    return localStorage.getItem("selectedCurrency") || "PKR"
+  })
 
   const currencies = [
     { value: "PKR", label: "Pakistani Rupee (PKR)" },
@@ -41,9 +44,9 @@ export function Settings({ onCurrencyChange, onDataSync }: SettingsProps) {
     })
   }
 
-  const handleDataSyncComplete = (syncedData: any) => {
+  const handleDataSyncComplete = async (syncedData: any) => {
     if (onDataSync) {
-      onDataSync(syncedData)
+      await onDataSync(syncedData)
     }
     toast({
       title: "Data Synchronized",

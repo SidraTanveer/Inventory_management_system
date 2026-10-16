@@ -38,9 +38,9 @@ interface Vendor {
 
 interface ProductDialogsProps {
   products: Product[]
-  onAddProduct: (product: Product) => void
-  onUpdateProduct: (product: Product) => void
-  onDeleteProduct: (productId: string, productName: string) => void // Changed to soft delete
+  onAddProduct: (product: Product) => Promise<boolean>
+  onUpdateProduct: (product: Product) => Promise<Product | null>
+  onDeleteProduct: (productId: string, productName: string) => Promise<void>
   currentAppCurrency: string
   user: any // Assuming user type from useAuth
   vendors: Vendor[] // Add vendors prop
@@ -128,10 +128,12 @@ export function ProductDialogs({
     importProductsFromExcel(
       file,
       vendors,
-      (importedProducts) => {
-        importedProducts.forEach((product) => onAddProduct(product))
-        setIsUploadDialogOpen(false)
-        // Show success toast
+      async (importedProducts) => {
+        let savedEveryProduct = true
+        for (const product of importedProducts) {
+          if (!(await onAddProduct(product))) savedEveryProduct = false
+        }
+        if (savedEveryProduct) setIsUploadDialogOpen(false)
       },
       (error) => {
         // Show error toast
@@ -173,7 +175,7 @@ export function ProductDialogs({
     }
   }, [editingProduct])
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     const newProduct: Product = {
       id: generateId(),
       name: formData.name,
@@ -186,9 +188,10 @@ export function ProductDialogs({
       sku: formData.sku,
       purchaseHistory: [],
     }
-    onAddProduct(newProduct)
-    setIsAddDialogOpen(false)
-    resetForm()
+    if (await onAddProduct(newProduct)) {
+      setIsAddDialogOpen(false)
+      resetForm()
+    }
   }
 
   const handleEditProduct = (product: Product) => {
@@ -196,7 +199,7 @@ export function ProductDialogs({
     setIsEditDialogOpen(true)
   }
 
-  const handleUpdateProduct = () => {
+  const handleUpdateProduct = async () => {
     if (editingProduct) {
       const updatedProduct: Product = {
         ...editingProduct,
@@ -209,15 +212,17 @@ export function ProductDialogs({
         category: formData.category,
         sku: formData.sku,
       }
-      onUpdateProduct(updatedProduct)
-      setIsEditDialogOpen(false)
-      setEditingProduct(null)
-      resetForm()
+      const savedProduct = await onUpdateProduct(updatedProduct)
+      if (savedProduct) {
+        setIsEditDialogOpen(false)
+        setEditingProduct(null)
+        resetForm()
+      }
     }
   }
 
-  const handleDeleteProduct = (productId: string, productName: string) => {
-    onDeleteProduct(productId, productName) // Call the soft delete handler from parent
+  const handleDeleteProduct = async (productId: string, productName: string) => {
+    await onDeleteProduct(productId, productName)
   }
 
   const handleViewProduct = (product: Product) => {
@@ -225,7 +230,7 @@ export function ProductDialogs({
     setIsViewDialogOpen(true)
   }
 
-  const handleAddPurchaseHistory = () => {
+  const handleAddPurchaseHistory = async () => {
     if (editingProduct) {
       const newPurchase: PurchaseHistoryItem = {
         id: generateId(),
@@ -240,8 +245,9 @@ export function ProductDialogs({
         purchaseHistory: [...editingProduct.purchaseHistory, newPurchase],
         stock: editingProduct.stock + newPurchase.quantity, // Increase stock
       }
-      onUpdateProduct(updatedProduct)
-      setEditingProduct(updatedProduct) // Update editingProduct to reflect new history and stock
+      const savedProduct = await onUpdateProduct(updatedProduct)
+      if (!savedProduct) return
+      setEditingProduct(savedProduct)
       setPurchaseHistoryFormData({
         date: "",
         quantity: "",

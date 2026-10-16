@@ -59,6 +59,15 @@ export async function ensureAuthTables() {
   await query(`ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS role TEXT`)
   await query(`ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS password_hash TEXT`)
   await query(`ALTER TABLE login_requests ADD COLUMN IF NOT EXISTS request_type TEXT DEFAULT 'login'`)
+  await query(`
+    CREATE TABLE IF NOT EXISTS guest_users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      permissions JSONB NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `)
 
   await query(
     `INSERT INTO users (id, name, email, password_hash, role, permissions)
@@ -101,6 +110,147 @@ export async function findUserByEmail(email: string) {
   return result.rows[0] ?? null
 }
 
+export async function findUserById(id: string) {
+  const result = await query(
+    "SELECT id, name, email, role, permissions, created_at FROM users WHERE id = $1",
+    [id],
+  )
+  return result.rows[0] ?? null
+}
+
+export async function getManagedUsers() {
+  const result = await query(
+    "SELECT id, name, email, role, permissions, created_at FROM users ORDER BY created_at",
+  )
+  return result.rows.map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role as UserRole,
+    permissions: row.permissions,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+  }))
+}
+
+export async function updateManagedUser(
+  id: string,
+  name: string,
+  email: string,
+  role: UserRole,
+  permissions: Record<string, boolean>,
+) {
+  const result = await query(
+    `UPDATE users SET name=$1, email=$2, role=$3, permissions=$4
+     WHERE id=$5
+     RETURNING id, name, email, role, permissions, created_at`,
+    [name, email, role, JSON.stringify(permissions), id],
+  )
+  const row = result.rows[0]
+  if (!row) return null
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role as UserRole,
+    permissions: row.permissions,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+  }
+}
+
+export async function deleteManagedUser(id: string) {
+  const result = await query("DELETE FROM users WHERE id=$1 RETURNING id", [id])
+  return result.rows[0] ?? null
+}
+
+export async function getGuestUsers() {
+  await ensureAuthTables()
+  const result = await query(
+    "SELECT id, name, email, permissions, created_at FROM guest_users ORDER BY created_at",
+  )
+  return result.rows.map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: "guest" as const,
+    permissions: row.permissions,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+  }))
+}
+
+export async function createGuestUser(
+  id: string,
+  name: string,
+  email: string,
+  permissions: Record<string, boolean>,
+) {
+  await ensureAuthTables()
+  const result = await query(
+    `INSERT INTO guest_users (id, name, email, permissions)
+     VALUES ($1,$2,$3,$4)
+     RETURNING id, name, email, permissions, created_at`,
+    [id, name, email, JSON.stringify(permissions)],
+  )
+  const row = result.rows[0]
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: "guest" as const,
+    permissions: row.permissions,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+  }
+}
+
+export async function updateGuestUser(
+  id: string,
+  name: string,
+  email: string,
+  permissions: Record<string, boolean>,
+) {
+  await ensureAuthTables()
+  const result = await query(
+    `UPDATE guest_users SET name=$1, email=$2, permissions=$3
+     WHERE id=$4
+     RETURNING id, name, email, permissions, created_at`,
+    [name, email, JSON.stringify(permissions), id],
+  )
+  const row = result.rows[0]
+  if (!row) return null
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: "guest" as const,
+    permissions: row.permissions,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+  }
+}
+
+export async function deleteGuestUser(id: string) {
+  await ensureAuthTables()
+  const result = await query("DELETE FROM guest_users WHERE id=$1 RETURNING id", [id])
+  return result.rows[0] ?? null
+}
+
+export async function findGuestByNameAndEmail(name: string, email: string) {
+  await ensureAuthTables()
+  const result = await query(
+    `SELECT id, name, email, permissions, created_at FROM guest_users
+     WHERE LOWER(name)=LOWER($1) AND LOWER(email)=LOWER($2) LIMIT 1`,
+    [name.trim(), email.trim()],
+  )
+  const row = result.rows[0]
+  if (!row) return null
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: "guest" as const,
+    permissions: row.permissions,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+  }
+}
+
 export async function verifyUserCredentials(email: string, password: string) {
   const result = await query(
     "SELECT id, name, email, role, permissions, created_at, password_hash FROM users WHERE LOWER(email) = LOWER($1)",
@@ -126,7 +276,13 @@ export async function verifyUserCredentials(email: string, password: string) {
   }
 }
 
-export async function createUser(name: string, email: string, password: string, role: UserRole) {
+export async function createUser(
+  name: string,
+  email: string,
+  password: string,
+  role: UserRole,
+  permissions = getPermissionsByRole(role),
+) {
   const existingUser = await query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email])
   if (existingUser.rows.length > 0) {
     throw new Error("A user with this email already exists.")
@@ -143,7 +299,7 @@ export async function createUser(name: string, email: string, password: string, 
       email,
       hashPassword(password),
       role,
-      JSON.stringify(getPermissionsByRole(role)),
+      JSON.stringify(permissions),
     ],
   )
 

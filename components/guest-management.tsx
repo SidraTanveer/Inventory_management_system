@@ -21,9 +21,9 @@ import { generateId, getCurrentDate } from "@/lib/utils"
 
 interface GuestManagementProps {
   guestUsers: User[]
-  onAddGuest: (guest: User) => void
-  onUpdateGuest: (guest: User) => void
-  onDeleteGuest: (id: string) => void
+  onAddGuest: (guest: User) => Promise<boolean>
+  onUpdateGuest: (guest: User) => Promise<boolean>
+  onDeleteGuest: (id: string) => Promise<boolean>
 }
 
 export function GuestManagement({ guestUsers, onAddGuest, onUpdateGuest, onDeleteGuest }: GuestManagementProps) {
@@ -56,16 +56,17 @@ export function GuestManagement({ guestUsers, onAddGuest, onUpdateGuest, onDelet
     })
   }
 
-  const handleAddGuest = () => {
+  const handleAddGuest = async () => {
     const newGuest: User = {
       id: generateId(),
       ...formData,
       role: "guest",
       createdAt: getCurrentDate(),
     }
-    onAddGuest(newGuest)
-    setIsAddDialogOpen(false)
-    resetForm()
+    if (await onAddGuest(newGuest)) {
+      setIsAddDialogOpen(false)
+      resetForm()
+    }
   }
 
   const handleEditGuest = (guest: User) => {
@@ -78,17 +79,18 @@ export function GuestManagement({ guestUsers, onAddGuest, onUpdateGuest, onDelet
     setIsEditDialogOpen(true)
   }
 
-  const handleUpdateGuest = () => {
+  const handleUpdateGuest = async () => {
     if (editingGuest) {
       const updatedGuest: User = {
         ...editingGuest,
         ...formData,
         role: "guest",
       }
-      onUpdateGuest(updatedGuest)
-      setIsEditDialogOpen(false)
-      setEditingGuest(null)
-      resetForm()
+      if (await onUpdateGuest(updatedGuest)) {
+        setIsEditDialogOpen(false)
+        setEditingGuest(null)
+        resetForm()
+      }
     }
   }
 
@@ -217,7 +219,7 @@ export function GuestManagement({ guestUsers, onAddGuest, onUpdateGuest, onDelet
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => onDeleteGuest(guest.id)}
+                    onClick={() => void onDeleteGuest(guest.id)}
                     className="border-red-200 text-red-600 hover:bg-red-50"
                   >
                     <Trash2 className="h-4 w-4" />

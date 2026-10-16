@@ -1,4 +1,4 @@
-import { Pool } from "pg"
+import { Pool, type PoolClient } from "pg"
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
@@ -30,6 +30,25 @@ export async function query<T = any>(text: string, params?: any[]) {
   try {
     const result = await client.query(text, params)
     return result as { rows: T[] }
+  } finally {
+    client.release()
+  }
+}
+
+export async function transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect()
+  try {
+    await client.query("BEGIN")
+    const result = await work(client)
+    await client.query("COMMIT")
+    return result
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK")
+    } catch (rollbackError) {
+      console.error("Database transaction rollback failed:", rollbackError)
+    }
+    throw error
   } finally {
     client.release()
   }

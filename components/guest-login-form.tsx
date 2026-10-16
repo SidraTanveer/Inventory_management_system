@@ -7,15 +7,13 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
-import type { User } from "@/types/auth"
 
 interface GuestLoginFormProps {
   onLoginSuccess: () => void
   onBackToMainLogin: () => void
-  guestUsers: User[]
 }
 
-export function GuestLoginForm({ onLoginSuccess, onBackToMainLogin, guestUsers }: GuestLoginFormProps) {
+export function GuestLoginForm({ onLoginSuccess, onBackToMainLogin }: GuestLoginFormProps) {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
@@ -27,21 +25,7 @@ export function GuestLoginForm({ onLoginSuccess, onBackToMainLogin, guestUsers }
     setLoading(true)
     setError("")
 
-    // Check if the guest user exists in the allowed guest users list
-    const guestUser = guestUsers.find(
-      (guest) =>
-        guest.name.toLowerCase().trim() === name.toLowerCase().trim() &&
-        guest.email.toLowerCase().trim() === email.toLowerCase().trim(),
-    )
-
-    if (!guestUser) {
-      setError("Access denied. Please contact the administrator to get guest access.")
-      setLoading(false)
-      return
-    }
-
-    // Use the guest login with the actual guest user details
-    const success = await login("guest", "guest", guestUser.name, guestUser.email)
+    const success = await login("guest", "guest", name, email)
     setLoading(false)
 
     if (success) {

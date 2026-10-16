@@ -8,13 +8,11 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
-import type { User } from "@/types/auth"
 
 interface LoginFormProps {
   onLoginSuccess: () => void
   onForgotPassword: () => void
   onGuestLogin: () => void
-  guestUsers: User[]
 }
 
 export function LoginForm({ onLoginSuccess, onForgotPassword, onGuestLogin }: LoginFormProps) {

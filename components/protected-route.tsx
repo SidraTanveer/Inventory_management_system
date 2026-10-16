@@ -14,7 +14,7 @@ export function ProtectedRoute({ children, requiredPermission }: ProtectedRouteP
   const { user } = useAuth()
 
   if (!user) {
-    return <LoginForm onLoginSuccess={() => {}} onForgotPassword={() => {}} onGuestLogin={() => {}} guestUsers={[]} />
+    return <LoginForm onLoginSuccess={() => {}} onForgotPassword={() => {}} onGuestLogin={() => {}} />
   }
 
   if (requiredPermission && !user.permissions[requiredPermission]) {

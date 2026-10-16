@@ -22,6 +22,7 @@ export async function POST(request: Request) {
     if (!id) return NextResponse.json({ success: false, error: "Trash item id required" }, { status: 400 })
 
     const restored = await restoreTrashItem(id)
+    if (!restored) return NextResponse.json({ success: false, error: "Trash item not found" }, { status: 404 })
     return NextResponse.json({ success: true, restored })
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to process trash request" }, { status: 500 })

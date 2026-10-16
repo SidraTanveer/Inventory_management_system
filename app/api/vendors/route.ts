@@ -26,6 +26,7 @@ export async function PUT(request: Request) {
     const { id, ...payload } = body
     if (!id) return NextResponse.json({ success: false, error: "Vendor id required" }, { status: 400 })
     const updated = await updateVendor(id, payload)
+    if (!updated) return NextResponse.json({ success: false, error: "Vendor not found" }, { status: 404 })
     return NextResponse.json({ success: true, vendor: updated })
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to update vendor" }, { status: 500 })
@@ -38,6 +39,7 @@ export async function DELETE(request: Request) {
     const id = searchParams.get("id")
     if (!id) return NextResponse.json({ success: false, error: "Vendor id is required" }, { status: 400 })
     const deleted = await deleteVendor(id)
+    if (!deleted) return NextResponse.json({ success: false, error: "Vendor not found" }, { status: 404 })
     return NextResponse.json({ success: true, deleted })
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to delete vendor" }, { status: 500 })

@@ -1,4 +1,5 @@
-import { query } from "@/lib/db"
+import { query, transaction } from "@/lib/db"
+import type { PoolClient } from "pg"
 import { mapDatabaseRows, mapDatabaseRow } from "@/lib/db-mapper"
 
 async function ensureInvoiceUniquenessGuard() {
@@ -23,6 +24,33 @@ async function ensureInvoiceUniquenessGuard() {
   } catch {
     // Best-effort guard only.
   }
+}
+
+async function replaceInvoiceItems(client: PoolClient, invoiceId: string, invoiceDate: string | Date, items: any[]) {
+  await client.query(`DELETE FROM invoice_items WHERE invoice_id=$1`, [invoiceId])
+  await client.query(`DELETE FROM sales_history_items WHERE invoice_id=$1`, [invoiceId])
+  const mappedItems = []
+
+  for (const item of items) {
+    const productId = item.product_id ?? item.productId ?? null
+    const productName = item.product_name ?? item.productName
+    const quantity = Number(item.quantity) || 0
+    const unitPrice = Number(item.unit_price ?? item.unitPrice) || 0
+    const costPrice = Number(item.cost_price ?? item.costPrice) || 0
+    await client.query(
+      `INSERT INTO invoice_items (invoice_id, product_id, product_name, quantity, unit_price, cost_price)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [invoiceId, productId || null, productName, quantity, unitPrice, costPrice],
+    )
+    await client.query(
+      `INSERT INTO sales_history_items (invoice_id, product_id, date, quantity, unit_price, total_price, profit)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [invoiceId, productId || null, invoiceDate, quantity, unitPrice, quantity * unitPrice, (unitPrice - costPrice) * quantity],
+    )
+    mappedItems.push({ productId, productName, quantity, unitPrice, costPrice })
+  }
+
+  return mappedItems
 }
 
 export async function getInvoices() {
@@ -80,140 +108,146 @@ export async function getInvoices() {
 }
 
 export async function createInvoice(payload: any) {
-  const { tracking_id, customer_name, customer_email, customer_phone, created_at, total_amount, total_cost, total_profit, profit_percentage, currency, status, items } = payload
+  const trackingId = payload.tracking_id ?? payload.trackingId
+  const customerName = payload.customer_name ?? payload.customerName
+  const customerEmail = payload.customer_email ?? payload.customerEmail
+  const customerPhone = payload.customer_phone ?? payload.customerPhone
+  const createdAt = payload.created_at ?? payload.createdAt ?? null
+  const totalAmount = payload.total_amount ?? payload.totalAmount
+  const totalCost = payload.total_cost ?? payload.totalCost
+  const totalProfit = payload.total_profit ?? payload.totalProfit
+  const profitPercentage = payload.profit_percentage ?? payload.profitPercentage
+  const { currency, status } = payload
+  const items = Array.isArray(payload.items) ? payload.items : []
   await ensureInvoiceUniquenessGuard()
 
-  const invoiceCreatedAt = created_at ?? null
-  const normalizedTrackingId = typeof tracking_id === "string" && tracking_id.trim() ? tracking_id.trim() : null
-
-  if (normalizedTrackingId) {
-    const existing = await query(
-      `SELECT id FROM invoices WHERE tracking_id = $1 LIMIT 1`,
-      [normalizedTrackingId],
-    )
-
-    const existingRow = existing.rows[0] as { id: string } | undefined
-    if (existingRow?.id) {
-      const updated = await query(
-        `UPDATE invoices
-         SET customer_name=$1, customer_email=$2, customer_phone=$3, created_at=COALESCE($4, created_at),
-             total_amount=$5, total_cost=$6, total_profit=$7, profit_percentage=$8, currency=$9, status=$10
-         WHERE id=$11
-         RETURNING id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost, total_profit, profit_percentage, created_at, currency, status`,
-        [
-          customer_name,
-          customer_email,
-          customer_phone ?? null,
-          invoiceCreatedAt,
-          Number(total_amount) || 0,
-          Number(total_cost) || 0,
-          Number(total_profit) || 0,
-          Number(profit_percentage) || 0,
-          currency ?? "USD",
-          status ?? "pending",
-          existingRow.id,
-        ],
-      )
-
-      await query(`DELETE FROM invoice_items WHERE invoice_id = $1`, [existingRow.id])
-      const mappedItems: any[] = []
-      if (Array.isArray(items) && items.length > 0) {
-        for (const it of items) {
-          await query(
-            `INSERT INTO invoice_items (invoice_id, product_id, product_name, quantity, unit_price, cost_price) VALUES ($1,$2,$3,$4,$5,$6)`,
-            [
-              existingRow.id,
-              it.product_id ?? null,
-              it.product_name,
-              Number(it.quantity) || 0,
-              Number(it.unit_price) || 0,
-              Number(it.cost_price) || 0,
-            ],
-          )
-
-          mappedItems.push({
-            productId: it.product_id,
-            productName: it.product_name,
-            quantity: it.quantity,
-            unitPrice: it.unit_price,
-            costPrice: it.cost_price,
-          })
-        }
+  const normalizedTrackingId = typeof trackingId === "string" && trackingId.trim() ? trackingId.trim() : null
+  return transaction(async (client) => {
+    let invoiceRow
+    if (normalizedTrackingId) {
+      const existing = await client.query(`SELECT id FROM invoices WHERE tracking_id=$1 LIMIT 1`, [normalizedTrackingId])
+      if (existing.rows[0]) {
+        const updated = await client.query(
+          `UPDATE invoices
+           SET customer_name=$1, customer_email=$2, customer_phone=$3, created_at=COALESCE($4, created_at),
+               total_amount=$5, total_cost=$6, total_profit=$7, profit_percentage=$8, currency=$9, status=$10
+           WHERE id=$11
+           RETURNING id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost,
+                     total_profit, profit_percentage, created_at, currency, status`,
+          [
+            customerName,
+            customerEmail,
+            customerPhone ?? null,
+            createdAt,
+            Number(totalAmount) || 0,
+            Number(totalCost) || 0,
+            Number(totalProfit) || 0,
+            Number(profitPercentage) || 0,
+            currency ?? "USD",
+            status ?? "pending",
+            existing.rows[0].id,
+          ],
+        )
+        invoiceRow = updated.rows[0]
+        const mappedItems = await replaceInvoiceItems(client, invoiceRow.id, invoiceRow.created_at, items)
+        const mapped = mapDatabaseRow(invoiceRow)
+        return { ...mapped, id: mapped.trackingId || mapped.id, items: mappedItems }
       }
-
-      const mapped = mapDatabaseRow(updated.rows[0])
-      return { ...mapped, id: mapped.trackingId || mapped.id, items: mappedItems }
     }
-  }
 
-  // Insert invoice and related items transactionally
-  const inserted = await query(
-    `INSERT INTO invoices (tracking_id, customer_name, customer_email, customer_phone, created_at, total_amount, total_cost, total_profit, profit_percentage, currency, status)
-     VALUES ($1,$2,$3,$4,COALESCE($5, NOW()),$6,$7,$8,$9,$10,$11) RETURNING id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost, total_profit, profit_percentage, created_at, currency, status`,
-    [normalizedTrackingId, customer_name, customer_email, customer_phone ?? null, invoiceCreatedAt, Number(total_amount) || 0, Number(total_cost) || 0, Number(total_profit) || 0, Number(profit_percentage) || 0, currency ?? 'USD', status ?? 'pending'],
-  )
-
-  const invoiceRow = inserted.rows[0]
-  const mappedItems: any[] = []
-
-  if (Array.isArray(items) && items.length > 0) {
-    for (const it of items) {
-      await query(
-        `INSERT INTO invoice_items (invoice_id, product_id, product_name, quantity, unit_price, cost_price) VALUES ($1,$2,$3,$4,$5,$6)`,
-        [invoiceRow.id, it.product_id ?? null, it.product_name, Number(it.quantity) || 0, Number(it.unit_price) || 0, Number(it.cost_price) || 0],
-      )
-
-      // Insert sales history item
-      await query(
-        `INSERT INTO sales_history_items (invoice_id, product_id, date, quantity, unit_price, total_price, profit) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [invoiceRow.id, it.product_id ?? null, invoiceRow.created_at, Number(it.quantity) || 0, Number(it.unit_price) || 0, Number(it.quantity) * Number(it.unit_price) || 0, (Number(it.unit_price) - Number(it.cost_price || 0)) * Number(it.quantity) || 0],
-      )
-      
-      // Add to mapped items
-      mappedItems.push({
-        productId: it.product_id,
-        productName: it.product_name,
-        quantity: it.quantity,
-        unitPrice: it.unit_price,
-        costPrice: it.cost_price
-      })
-    }
-  }
-
-  // Return object shaped for client: use tracking_id as id if available
-  const mapped = mapDatabaseRow(invoiceRow)
-  return { ...mapped, id: mapped.trackingId || mapped.id, items: mappedItems }
+    const inserted = await client.query(
+      `INSERT INTO invoices (tracking_id, customer_name, customer_email, customer_phone, created_at, total_amount, total_cost, total_profit, profit_percentage, currency, status)
+       VALUES ($1,$2,$3,$4,COALESCE($5, NOW()),$6,$7,$8,$9,$10,$11)
+       RETURNING id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost,
+                 total_profit, profit_percentage, created_at, currency, status`,
+      [
+        normalizedTrackingId,
+        customerName,
+        customerEmail,
+        customerPhone ?? null,
+        createdAt,
+        Number(totalAmount) || 0,
+        Number(totalCost) || 0,
+        Number(totalProfit) || 0,
+        Number(profitPercentage) || 0,
+        currency ?? "USD",
+        status ?? "pending",
+      ],
+    )
+    invoiceRow = inserted.rows[0]
+    const mappedItems = await replaceInvoiceItems(client, invoiceRow.id, invoiceRow.created_at, items)
+    const mapped = mapDatabaseRow(invoiceRow)
+    return { ...mapped, id: mapped.trackingId || mapped.id, items: mappedItems }
+  })
 }
 
 export async function updateInvoice(trackingIdOrId: string, payload: any) {
-  // Find by tracking_id or id
-  const find = await query(`SELECT id, tracking_id FROM invoices WHERE tracking_id=$1 OR id=$1`, [trackingIdOrId])
-  const row = find.rows[0]
-  if (!row) return null
+  return transaction(async (client) => {
+    const find = await client.query(`SELECT id, tracking_id FROM invoices WHERE tracking_id=$1 OR id=$1`, [trackingIdOrId])
+    const row = find.rows[0]
+    if (!row) return null
 
-  const { customer_name, customer_email, customer_phone, total_amount, total_cost, total_profit, profit_percentage, currency, status } = payload
-  const updated = await query(
-    `UPDATE invoices SET customer_name=$1, customer_email=$2, customer_phone=$3, total_amount=$4, total_cost=$5, total_profit=$6, profit_percentage=$7, currency=$8, status=$9 WHERE id=$10 RETURNING id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost, total_profit, profit_percentage, created_at, currency, status`,
-    [customer_name, customer_email, customer_phone ?? null, Number(total_amount) || 0, Number(total_cost) || 0, Number(total_profit) || 0, Number(profit_percentage) || 0, currency ?? 'USD', status ?? 'pending', row.id],
-  )
+    const customerName = payload.customer_name ?? payload.customerName
+    const customerEmail = payload.customer_email ?? payload.customerEmail
+    const customerPhone = payload.customer_phone ?? payload.customerPhone
+    const trackingId = payload.tracking_id ?? payload.trackingId ?? row.tracking_id
+    const createdAt = payload.created_at ?? payload.createdAt
+    const totalAmount = payload.total_amount ?? payload.totalAmount
+    const totalCost = payload.total_cost ?? payload.totalCost
+    const totalProfit = payload.total_profit ?? payload.totalProfit
+    const profitPercentage = payload.profit_percentage ?? payload.profitPercentage
+    const updated = await client.query(
+      `UPDATE invoices
+       SET tracking_id=$1, customer_name=$2, customer_email=$3, customer_phone=$4,
+           total_amount=$5, total_cost=$6, total_profit=$7, profit_percentage=$8,
+           currency=$9, status=$10, created_at=COALESCE($11, created_at)
+       WHERE id=$12
+       RETURNING id, tracking_id, customer_name, customer_email, customer_phone,
+                 total_amount, total_cost, total_profit, profit_percentage, created_at, currency, status`,
+      [
+        trackingId || null,
+        customerName,
+        customerEmail,
+        customerPhone ?? null,
+        Number(totalAmount) || 0,
+        Number(totalCost) || 0,
+        Number(totalProfit) || 0,
+        Number(profitPercentage) || 0,
+        payload.currency ?? "USD",
+        payload.status ?? "pending",
+        createdAt ?? null,
+        row.id,
+      ],
+    )
 
-  const updatedRow = updated.rows[0]
-  const mapped = mapDatabaseRow(updatedRow)
-  
-  // Load items for this invoice
-  const itemsRes = await query(`SELECT product_id, product_name, quantity, unit_price, cost_price FROM invoice_items WHERE invoice_id=$1`, [row.id])
-  const items = itemsRes.rows.map((item: any) => mapDatabaseRow(item))
-  
-  return { ...mapped, id: mapped.trackingId || mapped.id, items }
+    const mappedItems = await replaceInvoiceItems(
+      client,
+      row.id,
+      createdAt ?? updated.rows[0].created_at,
+      Array.isArray(payload.items) ? payload.items : [],
+    )
+
+    const mapped = mapDatabaseRow(updated.rows[0])
+    return { ...mapped, id: mapped.trackingId || mapped.id, items: mappedItems }
+  })
 }
 
 export async function deleteInvoice(trackingIdOrId: string) {
-  const find = await query(`SELECT id FROM invoices WHERE tracking_id=$1 OR id=$1`, [trackingIdOrId])
-  const row = find.rows[0]
-  if (!row) return null
-  // Move to trash
-  const inv = await query(`SELECT * FROM invoices WHERE id=$1`, [row.id])
-  await query(`INSERT INTO trash_items (original_id, type, data) VALUES ($1,$2,$3)`, [row.id, 'invoice', JSON.stringify(inv.rows[0])])
-  await query(`DELETE FROM invoices WHERE id=$1`, [row.id])
-  return { id: trackingIdOrId }
+  return transaction(async (client) => {
+    const find = await client.query(`SELECT id FROM invoices WHERE tracking_id=$1 OR id=$1`, [trackingIdOrId])
+    const row = find.rows[0]
+    if (!row) return null
+    const invoice = await client.query(`SELECT * FROM invoices WHERE id=$1`, [row.id])
+    const items = await client.query(
+      `SELECT product_id, product_name, quantity, unit_price, cost_price
+       FROM invoice_items WHERE invoice_id=$1`,
+      [row.id],
+    )
+    await client.query(
+      `INSERT INTO trash_items (original_id, type, data) VALUES ($1,$2,$3)`,
+      [row.id, "invoice", JSON.stringify({ ...invoice.rows[0], items: items.rows })],
+    )
+    await client.query(`DELETE FROM invoices WHERE id=$1`, [row.id])
+    return { id: trackingIdOrId }
+  })
 }

@@ -18,10 +18,10 @@ import {
   CheckCircle,
   Clock,
 } from "lucide-react"
-import { syncDataAcrossDevices, exportAllData, importAllData, getCurrentDate, getCurrentDateTime } from "@/lib/utils"
+import { exportAllData, getCurrentDate, getCurrentDateTime } from "@/lib/utils"
 
 interface DataSyncManagerProps {
-  onDataSync: (syncedData: any) => void
+  onDataSync: (syncedData: any) => void | Promise<void>
 }
 
 export function DataSyncManager({ onDataSync }: DataSyncManagerProps) {
@@ -59,12 +59,7 @@ export function DataSyncManager({ onDataSync }: DataSyncManagerProps) {
     setSyncStatus("syncing")
 
     try {
-      const dataKeys = ["ims_products", "ims_invoices", "ims_users", "ims_guest_users", "ims_deals", "ims_vendors"]
-
-      const syncedData = syncDataAcrossDevices(dataKeys)
-
-      // Update parent component with synced data
-      onDataSync(syncedData)
+      await onDataSync({})
 
       const currentTime = getCurrentDateTime()
       setLastSyncTime(currentTime)
@@ -73,7 +68,7 @@ export function DataSyncManager({ onDataSync }: DataSyncManagerProps) {
 
       toast({
         title: "Data Synchronized Successfully",
-        description: "Your data has been synced across all devices.",
+        description: "The latest saved records have been loaded from the database.",
       })
 
       // Reset status after 3 seconds
@@ -128,28 +123,38 @@ export function DataSyncManager({ onDataSync }: DataSyncManagerProps) {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (file) {
         const reader = new FileReader()
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
           try {
             const jsonData = e.target?.result as string
-            const success = importAllData(jsonData)
-
-            if (success) {
-              toast({
-                title: "Data Imported Successfully",
-                description: "Your data has been restored. Please refresh the page.",
-              })
-
-              // Trigger a page reload after 2 seconds to load the imported data
-              setTimeout(() => {
-                window.location.reload()
-              }, 2000)
-            } else {
-              throw new Error("Import failed")
+            const backup = JSON.parse(jsonData)
+            if (!backup || typeof backup !== "object" || Array.isArray(backup)) {
+              throw new Error("The backup file must contain a JSON object.")
             }
+            const importedData = {
+              ...backup,
+              ims_products: backup.ims_products ?? backup.products,
+              ims_invoices: backup.ims_invoices ?? backup.invoices,
+              ims_users: backup.ims_users ?? backup.users,
+              ims_guest_users: backup.ims_guest_users ?? backup.guestUsers,
+              ims_deals: backup.ims_deals ?? backup.deals,
+              ims_vendors: backup.ims_vendors ?? backup.vendors,
+              ims_customers: backup.ims_customers ?? backup.customers,
+              ims_trash: backup.ims_trash ?? backup.trashItems,
+            }
+            if (!Object.values(importedData).some(Array.isArray)) {
+              throw new Error("The backup file does not contain supported application data.")
+            }
+            await onDataSync(importedData)
+            toast({
+              title: "Data Imported Successfully",
+              description: "Your backup data has been saved. Reloading the application.",
+            })
+            setTimeout(() => window.location.reload(), 2000)
           } catch (error) {
+            console.error("Import error:", error)
             toast({
               title: "Import Failed",
-              description: "The backup file is invalid or corrupted.",
+              description: error instanceof Error ? error.message : "The backup file could not be saved.",
               variant: "destructive",
             })
           }
@@ -270,7 +275,7 @@ export function DataSyncManager({ onDataSync }: DataSyncManagerProps) {
           <h5 className="font-medium text-blue-900 mb-2">How it works:</h5>
           <ul className="text-sm text-blue-800 space-y-1">
             <li>
-              • <strong>Sync:</strong> Automatically merges data from all your devices
+              • <strong>Sync:</strong> Loads the latest saved records from the database
             </li>
             <li>
               • <strong>Export:</strong> Downloads a backup file to your device
@@ -279,7 +284,7 @@ export function DataSyncManager({ onDataSync }: DataSyncManagerProps) {
               • <strong>Import:</strong> Restores data from a backup file
             </li>
             <li>
-              • <strong>Auto-sync:</strong> Happens automatically when you login
+              • <strong>Saving:</strong> Changes are written to the database when you save them
             </li>
           </ul>
         </div>

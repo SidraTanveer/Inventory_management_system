@@ -26,6 +26,7 @@ export async function PUT(request: Request) {
     const { id, ...payload } = body
     if (!id) return NextResponse.json({ success: false, error: "Product id required" }, { status: 400 })
     const updated = await updateProduct(id, payload)
+    if (!updated) return NextResponse.json({ success: false, error: "Product not found" }, { status: 404 })
     return NextResponse.json({ success: true, product: updated })
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to update product" }, { status: 500 })
@@ -38,6 +39,7 @@ export async function DELETE(request: Request) {
     const id = searchParams.get("id")
     if (!id) return NextResponse.json({ success: false, error: "Product id is required" }, { status: 400 })
     const deleted = await deleteProduct(id)
+    if (!deleted) return NextResponse.json({ success: false, error: "Product not found" }, { status: 404 })
     return NextResponse.json({ success: true, deleted })
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to delete product" }, { status: 500 })

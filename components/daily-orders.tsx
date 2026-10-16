@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
@@ -78,40 +78,11 @@ export function DailyOrders({
   const [filterStatus, setFilterStatus] = useState("all")
   const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false)
   const [isDownloadingAll, setIsDownloadingAll] = useState(false)
-  const [dailyOrdersFromDb, setDailyOrdersFromDb] = useState<Invoice[]>([])
   const { toast } = useToast()
 
-  useEffect(() => {
-    const loadDailyOrders = async () => {
-      try {
-        const response = await fetch("/api/daily-orders")
-        if (!response.ok) return
-        const data = await response.json()
-        if (Array.isArray(data)) {
-          setDailyOrdersFromDb(data)
-        }
-      } catch (error) {
-        console.warn("Unable to load daily orders from server:", error)
-      }
-    }
-
-    loadDailyOrders()
-  }, [])
-
-  const mergedInvoices = useMemo(() => {
-    const merged = new Map<string, Invoice>()
-    ;[...dailyOrdersFromDb, ...invoices].forEach((invoice) => {
-      if (invoice?.id) {
-        merged.set(invoice.id, invoice)
-      }
-    })
-    return Array.from(merged.values())
-  }, [dailyOrdersFromDb, invoices])
+  const mergedInvoices = invoices
 
   const handleDeleteInvoice = (invoiceId: string) => {
-    setDailyOrdersFromDb((current) =>
-      current.filter((invoice) => invoice.id !== invoiceId && invoice.trackingId !== invoiceId),
-    )
     onDeleteInvoice(invoiceId)
   }
 

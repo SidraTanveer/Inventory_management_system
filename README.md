@@ -72,6 +72,7 @@ This project is an inventory and sales dashboard that includes:
 Required local and production environment variable:
 
 - `DATABASE_URL` - PostgreSQL connection string for Neon or any PostgreSQL server.
+- `AUTH_SECRET` - unique random value of at least 32 characters used to sign secure login sessions. Set it locally and in each Vercel environment.
 - `NEON_POSTGRES_URL` - alternative source used by the app if `DATABASE_URL` is not set.
 - `storage_POSTGRES_URL_NON_POOLING` / `STORAGE_POSTGRES_URL_NON_POOLING` - Supabase direct Postgres connection string.
 - `storage_POSTGRES_URL` / `STORAGE_POSTGRES_URL` - Supabase pooler connection string.

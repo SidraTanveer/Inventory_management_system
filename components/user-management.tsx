@@ -23,9 +23,9 @@ import { useAuth } from "@/hooks/useAuth" // Import useAuth
 
 interface UserManagementProps {
   users: User[]
-  onAddUser: (user: User) => void
-  onUpdateUser: (user: User) => void
-  onDeleteUser: (id: string) => void
+  onAddUser: (user: User, password: string) => Promise<boolean>
+  onUpdateUser: (user: User) => Promise<boolean>
+  onDeleteUser: (id: string) => Promise<boolean>
 }
 
 export function UserManagement({ users, onAddUser, onUpdateUser, onDeleteUser }: UserManagementProps) {
@@ -36,6 +36,7 @@ export function UserManagement({ users, onAddUser, onUpdateUser, onDeleteUser }:
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    password: "",
     role: "sales" as User["role"],
     permissions: {
       dashboard: true,
@@ -50,6 +51,7 @@ export function UserManagement({ users, onAddUser, onUpdateUser, onDeleteUser }:
     setFormData({
       name: "",
       email: "",
+      password: "",
       role: "sales",
       permissions: {
         dashboard: true,
@@ -61,15 +63,17 @@ export function UserManagement({ users, onAddUser, onUpdateUser, onDeleteUser }:
     })
   }
 
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
+    const { password, ...userForm } = formData
     const newUser: User = {
       id: generateId(),
-      ...formData,
+      ...userForm,
       createdAt: getCurrentDate(),
     }
-    onAddUser(newUser)
-    setIsAddDialogOpen(false)
-    resetForm()
+    if (await onAddUser(newUser, password)) {
+      setIsAddDialogOpen(false)
+      resetForm()
+    }
   }
 
   const handleEditUser = (user: User) => {
@@ -77,22 +81,24 @@ export function UserManagement({ users, onAddUser, onUpdateUser, onDeleteUser }:
     setFormData({
       name: user.name,
       email: user.email,
+      password: "",
       role: user.role,
       permissions: { ...user.permissions },
     })
     setIsEditDialogOpen(true)
   }
 
-  const handleUpdateUser = () => {
+  const handleUpdateUser = async () => {
     if (editingUser) {
       const updatedUser: User = {
         ...editingUser,
         ...formData,
       }
-      onUpdateUser(updatedUser)
-      setIsEditDialogOpen(false)
-      setEditingUser(null)
-      resetForm()
+      if (await onUpdateUser(updatedUser)) {
+        setIsEditDialogOpen(false)
+        setEditingUser(null)
+        resetForm()
+      }
     }
   }
 
@@ -186,6 +192,22 @@ export function UserManagement({ users, onAddUser, onUpdateUser, onDeleteUser }:
                   />
                 </div>
                 <div>
+                  <Label htmlFor="password" className="font-medium">
+                    Initial password
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="new-password"
+                    minLength={8}
+                    required
+                    value={formData.password}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                    placeholder="At least 8 characters"
+                    className="border-purple-200 focus:border-purple-500"
+                  />
+                </div>
+                <div>
                   <Label htmlFor="role" className="font-medium">
                     Role
                   </Label>
@@ -270,7 +292,7 @@ export function UserManagement({ users, onAddUser, onUpdateUser, onDeleteUser }:
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => onDeleteUser(user.id)}
+                      onClick={() => void onDeleteUser(user.id)}
                       className="border-red-200 text-red-600 hover:bg-red-50"
                     >
                       <Trash2 className="h-4 w-4" />

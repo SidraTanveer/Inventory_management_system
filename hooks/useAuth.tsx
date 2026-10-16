@@ -5,14 +5,6 @@ import { createContext, useContext, useState, useEffect } from "react"
 import type { User, AuthContextType, UserRole, LoginRequest } from "@/types/auth"
 import { useToast } from "@/hooks/use-toast"
 
-type RegisteredUser = {
-  id: string
-  name: string
-  email: string
-  password: string
-  role: UserRole
-}
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const getPermissionsByRole = (role: UserRole) => {
@@ -37,7 +29,6 @@ const getPermissionsByRole = (role: UserRole) => {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([])
   const [loginRequests, setLoginRequests] = useState<LoginRequest[]>([])
   const { toast } = useToast()
 
@@ -56,18 +47,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Simulate admin password for demonstration purposes (no database)
-  const [adminSimulatedPassword, setAdminSimulatedPassword] = useState("password")
-
   useEffect(() => {
     const storedUser = localStorage.getItem("currentUser")
     if (storedUser) {
       setUser(JSON.parse(storedUser))
-    }
-    // Load simulated password if stored (for persistence across sessions)
-    const storedAdminPass = localStorage.getItem("adminSimulatedPassword")
-    if (storedAdminPass) {
-      setAdminSimulatedPassword(storedAdminPass)
     }
 
     const storedLoginRequests = localStorage.getItem("ims_login_requests")
@@ -79,13 +62,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    fetchLoginRequestsFromServer()
   }, [])
 
-  const persistRegisteredUsers = (users: RegisteredUser[]) => {
-    setRegisteredUsers(users)
-    localStorage.setItem("ims_registered_users", JSON.stringify(users))
-  }
+  useEffect(() => {
+    if (user?.role === "admin") {
+      fetchLoginRequestsFromServer()
+    }
+  }, [user])
 
   const persistLoginRequests = (requests: LoginRequest[]) => {
     setLoginRequests(requests)
@@ -99,7 +82,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "login", email, password, name: guestName, message: "Login attempt from web client" }),
+        body: JSON.stringify({
+          type: email === "guest" ? "guest-login" : "login",
+          email,
+          password,
+          name: guestName,
+          guestEmail,
+          message: "Login attempt from web client",
+        }),
       })
       const result = await response.json()
 
@@ -147,6 +137,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     setUser(null)
     localStorage.removeItem("currentUser")
+    fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "logout" }),
+    }).catch((error) => console.error("Unable to end server session:", error))
     toast({
       title: "Logged Out",
       description: "You have been successfully logged out.",
@@ -269,38 +264,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const changePassword = async (userId: string, currentPassword: string, newPassword: string): Promise<boolean> => {
-    await new Promise((resolve) => setTimeout(resolve, 500))
-
-    if (userId === "user-1" && user?.role === "admin") {
-      if (currentPassword !== adminSimulatedPassword) {
-        toast({
-          title: "Password Change Failed",
-          description: "Current password is incorrect.",
-          variant: "destructive",
-        })
-        return false
+    try {
+      const response = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "change-password", userId, currentPassword, newPassword }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to change password.")
       }
-      if (newPassword === currentPassword) {
-        toast({
-          title: "Password Change Failed",
-          description: "New password cannot be the same as the current password.",
-          variant: "destructive",
-        })
-        return false
-      }
-
-      // Simulate password update
-      setAdminSimulatedPassword(newPassword)
-      localStorage.setItem("adminSimulatedPassword", newPassword) // Persist simulated password
       toast({
         title: "Password Changed",
-        description: "Your password has been updated successfully.",
+        description: "Your password has been updated in the database.",
       })
       return true
-    } else {
+    } catch (error) {
       toast({
         title: "Password Change Failed",
-        description: "You do not have permission to change this password.",
+        description: error instanceof Error ? error.message : "Unable to update your password.",
         variant: "destructive",
       })
       return false

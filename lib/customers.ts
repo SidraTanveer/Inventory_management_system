@@ -1,4 +1,4 @@
-import { query } from "@/lib/db"
+import { query, transaction } from "@/lib/db"
 import { mapDatabaseRows, mapDatabaseRow } from "@/lib/db-mapper"
 
 export async function getCustomers() {
@@ -25,10 +25,15 @@ export async function updateCustomer(id: string, payload: any) {
 }
 
 export async function deleteCustomer(id: string) {
-  const t = await query(`SELECT * FROM customers WHERE id=$1`, [id])
-  const row = t.rows[0]
-  if (!row) return null
-  await query(`INSERT INTO trash_items (original_id, type, data) VALUES ($1,$2,$3)`, [id, 'customer', JSON.stringify(row)])
-  const del = await query(`DELETE FROM customers WHERE id=$1 RETURNING id`, [id])
-  return mapDatabaseRow(del.rows[0] ?? null)
+  return transaction(async (client) => {
+    const existing = await client.query(`SELECT * FROM customers WHERE id=$1`, [id])
+    const row = existing.rows[0]
+    if (!row) return null
+    await client.query(
+      `INSERT INTO trash_items (original_id, type, data) VALUES ($1,$2,$3)`,
+      [id, "customer", JSON.stringify(row)],
+    )
+    const deleted = await client.query(`DELETE FROM customers WHERE id=$1 RETURNING id`, [id])
+    return mapDatabaseRow(deleted.rows[0] ?? null)
+  })
 }

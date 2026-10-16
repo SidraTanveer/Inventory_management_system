@@ -1,6 +1,17 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
-import { ensureAuthTables, findUserByEmail, hashPassword, saveLoginRequest, createSignupRequest, findPendingSignupRequestByEmail } from "@/lib/auth"
+import {
+  ensureAuthTables,
+  changeUserPassword,
+  findUserById,
+  findGuestByNameAndEmail,
+  findUserByEmail,
+  hashPassword,
+  saveLoginRequest,
+  createSignupRequest,
+  findPendingSignupRequestByEmail,
+} from "@/lib/auth"
+import { clearAuthSessionCookie, createAuthSession, setAuthSessionCookie, verifyAuthSession } from "@/lib/auth-session"
 
 export async function GET() {
   try {
@@ -18,12 +29,51 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { type, email, password, name, role, message } = body
+    const { type, email, password, name, guestEmail, role, message } = body
+
+    if (type === "logout") {
+      const response = NextResponse.json({ success: true })
+      clearAuthSessionCookie(response)
+      return response
+    }
+
+    if (type === "change-password") {
+      const session = verifyAuthSession(request.cookies.get("ims_session")?.value)
+      if (!session || session.userId !== body.userId || session.role !== "admin") {
+        return NextResponse.json({ success: false, error: "An administrator session is required." }, { status: 401 })
+      }
+      if (
+        typeof body.currentPassword !== "string" ||
+        typeof body.newPassword !== "string" ||
+        body.newPassword.length < 8
+      ) {
+        return NextResponse.json({ success: false, error: "A current password and a new password of at least 8 characters are required." }, { status: 400 })
+      }
+      const user = await findUserById(session.userId)
+      if (user?.role !== "admin") {
+        return NextResponse.json({ success: false, error: "An administrator session is required." }, { status: 401 })
+      }
+      await changeUserPassword(body.userId, body.currentPassword, body.newPassword)
+      return NextResponse.json({ success: true })
+    }
 
     await ensureAuthTables()
+
+    if (type === "guest-login") {
+      if (!name || !guestEmail) {
+        return NextResponse.json({ success: false, error: "Guest name and email are required." }, { status: 400 })
+      }
+      const guest = await findGuestByNameAndEmail(name, guestEmail)
+      if (!guest) {
+        return NextResponse.json({ success: false, error: "Guest access was not found." }, { status: 403 })
+      }
+      const response = NextResponse.json({ success: true, user: guest })
+      setAuthSessionCookie(response, createAuthSession(guest.id, guest.role))
+      return response
+    }
 
     if (type === "login") {
       if (!email || !password) {
@@ -57,7 +107,9 @@ export async function POST(request: Request) {
         createdAt: user.created_at,
       }
 
-      return NextResponse.json({ success: true, user: safeUser })
+      const response = NextResponse.json({ success: true, user: safeUser })
+      setAuthSessionCookie(response, createAuthSession(user.id, user.role))
+      return response
     }
 
     if (type === "register") {

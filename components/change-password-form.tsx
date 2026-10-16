@@ -43,10 +43,10 @@ export function ChangePasswordForm() {
       return
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
       toast({
         title: "Password Too Short",
-        description: "New password must be at least 6 characters long.",
+        description: "New password must be at least 8 characters long.",
         variant: "destructive",
       })
       return
@@ -121,7 +121,7 @@ export function ChangePasswordForm() {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             required
-            minLength={6}
+            minLength={8}
             className="pr-10"
           />
           <Button
@@ -145,7 +145,7 @@ export function ChangePasswordForm() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
-            minLength={6}
+            minLength={8}
             className="pr-10"
           />
           <Button

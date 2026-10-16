@@ -64,9 +64,22 @@ import {
   getDaysSince,
 } from "@/lib/utils"
 import { savePDFToDatabase } from "@/lib/pdf-utils"
-import { upsertDailyOrder, deleteDailyOrder, getDailyOrders } from "@/lib/daily-orders"
-
 const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36)
+
+async function requestApi<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init)
+  const payload: unknown = await response.json()
+  const responseBody =
+    typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>) : undefined
+
+  if (!response.ok || responseBody?.success === false) {
+    const message =
+      typeof responseBody?.error === "string" ? responseBody.error : `Request failed with status ${response.status}`
+    throw new Error(message)
+  }
+
+  return payload as T
+}
 
 const toSafeNumber = (value: any, fallback = 0) => {
   if (value === undefined || value === null || value === "") return fallback
@@ -481,143 +494,32 @@ function DashboardPageContent() {
 
   const { user, logout, loginRequests, approveLoginRequest, rejectLoginRequest } = useAuth()
   const { toast } = useToast()
+  const reportPersistenceError = (action: string, error: unknown) => {
+    console.error(`Unable to ${action}:`, error)
+    toast({
+      title: "Could not save changes",
+      description: error instanceof Error ? error.message : `Unable to ${action}. Please try again.`,
+      variant: "destructive",
+    })
+  }
   const [showLandingPage, setShowLandingPage] = useState(true)
   const [showForgotPassword, setShowForgotPassword] = useState(false)
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard")
   const [showGuestLogin, setShowGuestLogin] = useState(false)
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false)
-  const [currentAppCurrency, setCurrentAppCurrency] = useState<string>(getInitialCurrency())
-
-  const [products, setProducts] = useState<Product[]>(() => {
-    try {
-      const loaded = loadFromLocalStorage("ims_products")
-      return Array.isArray(loaded) && loaded.length > 0
-        ? mergeProductsById(normalizeProducts(loaded), normalizeProducts(initialMockProducts))
-        : normalizeProducts(initialMockProducts)
-    } catch (err) {
-      console.error("[v0] Error loading products:", err)
-      return normalizeProducts(initialMockProducts)
-    }
+  const [isDatabaseDataLoaded, setIsDatabaseDataLoaded] = useState(false)
+  const [currentAppCurrency, setCurrentAppCurrency] = useState<string>(() => {
+    if (typeof window === "undefined") return getInitialCurrency()
+    return localStorage.getItem("selectedCurrency") || getInitialCurrency()
   })
 
-  const [invoices, setInvoices] = useState<Invoice[]>(() => {
-    try {
-      const loaded = loadFromLocalStorage("ims_invoices")
-      return Array.isArray(loaded) ? dedupeInvoices(loaded) : dedupeInvoices(mockInvoices)
-    } catch (err) {
-      console.error("[v0] Error loading invoices:", err)
-      return dedupeInvoices(mockInvoices)
-    }
-  })
-
-  const [users, setUsers] = useState<AuthUser[]>(() => {
-    const saved = loadFromLocalStorage("ims_users")
-    const defaultUsers: AuthUser[] = [
-      {
-        id: "user-1",
-        name: "Admin User",
-        email: "nomanandy20@gmail.com",
-        role: "admin",
-        permissions: {
-          dashboard: true,
-          products: true,
-          invoices: true,
-          reports: true,
-          settings: true,
-        },
-        createdAt: "2024-01-01",
-      },
-      {
-        id: "user-2",
-        name: "Sales Manager",
-        email: "sales@example.com",
-        role: "sales",
-        permissions: {
-          dashboard: true,
-          products: true,
-          invoices: true,
-          reports: false,
-          settings: false,
-        },
-        createdAt: "2024-01-05",
-      },
-    ]
-    return Array.isArray(saved) ? mergeUsers(saved, defaultUsers) : defaultUsers
-  })
-
-  const [guestUsers, setGuestUsers] = useState<AuthUser[]>(() => {
-    const saved = loadFromLocalStorage("ims_guest_users")
-    const defaultGuests: AuthUser[] = [
-      {
-        id: "guest-1",
-        name: "Temporary Viewer",
-        email: "viewer@example.com",
-        role: "guest",
-        permissions: {
-          dashboard: true,
-          products: true,
-          invoices: true,
-          reports: false,
-          settings: false,
-        },
-        createdAt: "2024-03-01",
-      },
-      {
-        id: "guest-2",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        role: "guest",
-        permissions: {
-          dashboard: true,
-          products: true,
-          invoices: true,
-          reports: false,
-          settings: false,
-        },
-        createdAt: "2024-03-15",
-      },
-      {
-        id: "guest-3",
-        name: "Jane Smith",
-        email: "jane.smith@example.com",
-        role: "guest",
-        permissions: {
-          dashboard: true,
-          products: true,
-          invoices: true,
-          reports: false,
-          settings: false,
-        },
-        createdAt: "2024-03-20",
-      },
-    ]
-    return Array.isArray(saved) ? mergeUsers(saved, defaultGuests) : defaultGuests
-  })
-
-  const [deals, setDeals] = useState<Deal[]>(() => {
-    const saved = loadFromLocalStorage("ims_deals")
-    return Array.isArray(saved) ? mergeDeals(saved, mockDeals) : mockDeals
-  })
-
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    try {
-      const loaded = loadFromLocalStorage("ims_customers")
-      return Array.isArray(loaded) ? mergeCustomers(loaded, mockCustomers) : mockCustomers
-    } catch (err) {
-      console.error("[v0] Error loading customers:", err)
-      return mockCustomers
-    }
-  })
-
-  const [postOfficeRecords, setPostOfficeRecords] = useState<PostOfficeRecord[]>(() => {
-    try {
-      const loaded = loadFromLocalStorage("ims_post_office_records")
-      return Array.isArray(loaded) ? loaded : []
-    } catch (err) {
-      console.error("[v0] Error loading post office records:", err)
-      return []
-    }
-  })
+  const [products, setProducts] = useState<Product[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [users, setUsers] = useState<AuthUser[]>([])
+  const [guestUsers, setGuestUsers] = useState<AuthUser[]>([])
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [postOfficeRecords, setPostOfficeRecords] = useState<PostOfficeRecord[]>([])
 
   const persistPostOfficeRecords = (updater: (prev: PostOfficeRecord[]) => PostOfficeRecord[]) => {
     setPostOfficeRecords((prev) => {
@@ -627,24 +529,55 @@ function DashboardPageContent() {
     })
   }
 
-  const [vendors, setVendors] = useState<Vendor[]>(() => {
-    try {
-      const loaded = loadFromLocalStorage("ims_vendors")
-      return Array.isArray(loaded) ? mergeVendors(loaded, mockVendors) : mockVendors
-    } catch (err) {
-      console.error("[v0] Error loading vendors:", err)
-      return mockVendors
-    }
-  })
-
-  const [trashItems, setTrashItems] = useState<TrashItem[]>(() => {
-    const saved = loadFromLocalStorage("ims_trash")
-    return saved || []
-  })
+  const [vendors, setVendors] = useState<Vendor[]>([])
+  const [trashItems, setTrashItems] = useState<TrashItem[]>([])
 
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null)
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
   const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false)
+
+  const refreshDataFromDatabase = async () => {
+    const [productsData, invoicesData, customersData, postOfficeData, vendorsData, dealsData, trashData] =
+      await Promise.all([
+        requestApi<Product[]>("/api/products"),
+        requestApi<Invoice[]>("/api/invoices"),
+        requestApi<Customer[]>("/api/customers"),
+        requestApi<PostOfficeRecord[]>("/api/post-office"),
+        requestApi<Vendor[]>("/api/vendors"),
+        requestApi<Deal[]>("/api/deals"),
+        requestApi<TrashItem[]>("/api/trash"),
+      ])
+
+    if (
+      !Array.isArray(productsData) ||
+      !Array.isArray(invoicesData) ||
+      !Array.isArray(customersData) ||
+      !Array.isArray(postOfficeData) ||
+      !Array.isArray(vendorsData) ||
+      !Array.isArray(dealsData) ||
+      !Array.isArray(trashData)
+    ) {
+      throw new Error("The database returned invalid saved data.")
+    }
+
+    setProducts(normalizeProducts(productsData))
+    setInvoices(invoicesData)
+    setCustomers(customersData)
+    setPostOfficeRecords(postOfficeData)
+    setVendors(vendorsData)
+    setDeals(dealsData)
+    setTrashItems(trashData)
+    setIsDatabaseDataLoaded(true)
+  }
+
+  const refreshManagedUsersFromDatabase = async () => {
+    const result = await requestApi<{ users: AuthUser[]; guests: AuthUser[] }>("/api/admin-users")
+    if (!Array.isArray(result.users) || !Array.isArray(result.guests)) {
+      throw new Error("The database returned invalid user data.")
+    }
+    setUsers(result.users)
+    setGuestUsers(result.guests)
+  }
 
   useEffect(() => {
     console.log("[v0] Verifying loaded data on mount:")
@@ -660,156 +593,93 @@ function DashboardPageContent() {
   }, []) // Added empty dependency array to run only once on mount
 
   useEffect(() => {
-    const performAutoSync = async () => {
-      try {
-        // The localStorage saves are handled by individual useEffect hooks
-        console.log("[v0] Auto-sync check: data persisted to localStorage")
-      } catch (error) {
-        console.error("[v0] Auto-sync failed:", error)
-      }
-    }
-
-    const syncInterval = setInterval(performAutoSync, 60000)
-    return () => clearInterval(syncInterval)
-  }, [])
-
-  useEffect(() => {
-    if (Array.isArray(products)) {
+    if (isDatabaseDataLoaded && Array.isArray(products)) {
       saveToLocalStorage("ims_products", products)
     }
-  }, [products])
+  }, [products, isDatabaseDataLoaded])
 
   useEffect(() => {
-    if (Array.isArray(invoices)) {
+    if (isDatabaseDataLoaded && Array.isArray(invoices)) {
       saveToLocalStorage("ims_invoices", invoices)
     }
-  }, [invoices])
+  }, [invoices, isDatabaseDataLoaded])
 
   useEffect(() => {
-    if (Array.isArray(customers)) {
+    if (isDatabaseDataLoaded && Array.isArray(customers)) {
       saveToLocalStorage("ims_customers", customers)
     }
-  }, [customers])
+  }, [customers, isDatabaseDataLoaded])
 
   useEffect(() => {
-    if (Array.isArray(postOfficeRecords)) {
+    if (isDatabaseDataLoaded && Array.isArray(postOfficeRecords)) {
       saveToLocalStorage("ims_post_office_records", postOfficeRecords)
     }
-  }, [postOfficeRecords])
+  }, [postOfficeRecords, isDatabaseDataLoaded])
 
   useEffect(() => {
-    if (Array.isArray(vendors)) {
+    if (isDatabaseDataLoaded && Array.isArray(vendors)) {
       saveToLocalStorage("ims_vendors", vendors)
     }
-  }, [vendors])
+  }, [vendors, isDatabaseDataLoaded])
 
   useEffect(() => {
-    if (Array.isArray(deals)) {
+    if (isDatabaseDataLoaded && Array.isArray(deals)) {
       saveToLocalStorage("ims_deals", deals)
     }
-  }, [deals])
+  }, [deals, isDatabaseDataLoaded])
 
   useEffect(() => {
-    if (Array.isArray(trashItems)) {
+    if (isDatabaseDataLoaded && Array.isArray(trashItems)) {
       saveToLocalStorage("ims_trash", trashItems)
     }
-  }, [trashItems])
+  }, [trashItems, isDatabaseDataLoaded])
 
   useEffect(() => {
-    const loadDataFromServer = async () => {
-      const loadIfNeeded = async (
-        key: string,
-        request: () => Promise<Response>,
-        apply: (data: any) => void,
-      ) => {
-        if (hasStoredLocalData(key)) {
-          return
-        }
-
-        try {
-          const res = await request()
-          if (res.ok) {
-            const data = await res.json()
-            if (Array.isArray(data)) {
-              apply(data)
-            }
-          }
-        } catch (error) {
-          console.warn(`Unable to load ${key} from server:`, error)
-        }
-      }
-
-      await loadIfNeeded("ims_products", () => fetch('/api/products'), (prodData) => {
-        setProducts((prev) => mergeProductsById(normalizeProducts(prodData), prev))
-      })
-
-      await loadIfNeeded("ims_invoices", () => fetch('/api/invoices'), (invData) => {
-        setInvoices(dedupeInvoices(invData))
-      })
-
-      try {
-        const dailyRes = await fetch('/api/daily-orders')
-        if (dailyRes.ok) {
-          const dailyData = await dailyRes.json()
-          if (Array.isArray(dailyData)) {
-            setInvoices((prev) => mergeInvoicesById(prev, dailyData))
-          }
-        }
-      } catch (error) {
-        console.warn('Unable to load daily orders from server:', error)
-      }
-
-      await loadIfNeeded("ims_customers", () => fetch('/api/customers'), (custData) => {
-        setCustomers((prev) => mergeCustomers(custData, prev))
-      })
-
-      const storedPostOfficeRecords = loadFromLocalStorage("ims_post_office_records")
-      if (Array.isArray(storedPostOfficeRecords) && storedPostOfficeRecords.length > 0) {
-        setPostOfficeRecords(storedPostOfficeRecords)
-      } else {
-        await loadIfNeeded("ims_post_office_records", () => fetch('/api/post-office'), (postData) => {
-          setPostOfficeRecords(Array.isArray(postData) ? postData : [])
-        })
-      }
-
-      await loadIfNeeded("ims_vendors", () => fetch('/api/vendors'), (vendData) => {
-        setVendors((prev) => mergeVendors(vendData, prev))
-      })
-
-      await loadIfNeeded("ims_deals", () => fetch('/api/deals'), (dealData) => {
-        setDeals((prev) => mergeDeals(dealData, prev))
-      })
-
-      await loadIfNeeded("ims_trash", () => fetch('/api/trash'), (trashData) => {
-        setTrashItems(trashData)
-      })
-    }
-
-    loadDataFromServer()
-  }, [])
+    refreshDataFromDatabase().catch((error) => reportPersistenceError("load saved data", error))
+  }, [toast])
 
   useEffect(() => {
-    if (Array.isArray(users)) {
+    if (user?.role !== "admin") return
+
+    refreshManagedUsersFromDatabase().catch((error) =>
+      reportPersistenceError("load user and guest lists", error),
+    )
+  }, [user?.id, user?.role])
+
+  useEffect(() => {
+    if (isDatabaseDataLoaded && Array.isArray(users)) {
       saveToLocalStorage("ims_users", users)
     }
-  }, [users])
+  }, [users, isDatabaseDataLoaded])
+
+  useEffect(() => {
+    if (isDatabaseDataLoaded && Array.isArray(guestUsers)) {
+      saveToLocalStorage("ims_guest_users", guestUsers)
+    }
+  }, [guestUsers, isDatabaseDataLoaded])
 
   useEffect(() => {
     const cleanUpTrash = () => {
-      const now = new Date()
-      const updatedTrash = trashItems.filter((item) => {
-        const deletedDate = new Date(item.deletedAt)
-        const daysSinceDeletion = getDaysSince(item.deletedAt)
-        return daysSinceDeletion < 60
-      })
+      const expiredIds = trashItems
+        .filter((item) => getDaysSince(item.deletedAt) >= 60)
+        .map((item) => item.id)
+      if (expiredIds.length === 0) return
 
-      if (updatedTrash.length !== trashItems.length) {
-        setTrashItems(updatedTrash)
-        toast({
-          title: "Trash Auto-Cleaned",
-          description: "Items older than 60 days have been permanently removed from trash.",
-        })
+      const deleteExpiredItems = async () => {
+        try {
+          const query = expiredIds.map((id) => `id=${encodeURIComponent(id)}`).join("&")
+          await requestApi(`/api/trash?${query}`, { method: "DELETE" })
+          setTrashItems((prev) => prev.filter((item) => !expiredIds.includes(item.id)))
+          toast({
+            title: "Trash Auto-Cleaned",
+            description: "Items older than 60 days have been permanently removed from trash.",
+          })
+        } catch (error) {
+          reportPersistenceError("clean up expired trash items", error)
+        }
       }
+
+      deleteExpiredItems()
     }
 
     cleanUpTrash()
@@ -869,44 +739,71 @@ function DashboardPageContent() {
     setActiveTab("dashboard")
   }
 
-  const hasStoredLocalData = (key: string) => {
+  const handleDataSync = async (syncedData: any) => {
+    if (!syncedData || Object.keys(syncedData).length === 0) {
+      await refreshDataFromDatabase()
+      if (user?.role === "admin") await refreshManagedUsersFromDatabase()
+      return
+    }
+
     try {
-      const raw = localStorage.getItem(key)
-      if (!raw) return false
-      const parsed = JSON.parse(raw)
-      const values = parsed && typeof parsed === "object" && "data" in parsed ? parsed.data : parsed
-      return Array.isArray(values) ? values.length > 0 : Boolean(values)
+      const failedImports: string[] = []
+      if (Array.isArray(syncedData["ims_products"])) {
+        for (const product of syncedData["ims_products"]) {
+          if (!(await handleAddProduct(normalizeProduct(product)))) failedImports.push("products")
+        }
+      }
+      if (Array.isArray(syncedData["ims_invoices"]) && !(await handleAddInvoices(syncedData["ims_invoices"]))) {
+        failedImports.push("invoices")
+      }
+      if (Array.isArray(syncedData["ims_deals"])) {
+        for (const deal of syncedData["ims_deals"]) if (!(await handleAddDeal(deal))) failedImports.push("deals")
+      }
+      if (Array.isArray(syncedData["ims_vendors"])) {
+        for (const vendor of syncedData["ims_vendors"]) if (!(await handleAddVendor(vendor))) failedImports.push("vendors")
+      }
+      if (Array.isArray(syncedData["ims_customers"])) {
+        for (const customer of syncedData["ims_customers"]) {
+          if (!(await handleAddCustomer(customer))) failedImports.push("customers")
+        }
+      }
+      if (Array.isArray(syncedData["ims_users"]) && syncedData["ims_users"].length > 0) {
+        throw new Error("User backup imports cannot include passwords. Create or reset user passwords through User Management.")
+      }
+      if (Array.isArray(syncedData["ims_guest_users"])) {
+        for (const guest of syncedData["ims_guest_users"]) {
+          const result = await requestApi<{ guest: AuthUser }>("/api/admin-users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "guest", ...guest }),
+          })
+          if (!result.guest) throw new Error("An imported guest was not saved to the database.")
+        }
+      }
+
+      if (Array.isArray(syncedData["ims_trash"])) {
+        for (const item of syncedData["ims_trash"]) {
+          await requestApi("/api/trash", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(item),
+          })
+        }
+        setTrashItems(await requestApi<TrashItem[]>("/api/trash"))
+      }
+      if (Array.isArray(syncedData["ims_guest_users"])) {
+        await refreshManagedUsersFromDatabase()
+      }
+      if (failedImports.length > 0) {
+        throw new Error(`Some imported ${Array.from(new Set(failedImports)).join(", ")} could not be saved.`)
+      }
     } catch (error) {
-      console.warn(`Unable to read local cache for ${key}:`, error)
-      return false
+      reportPersistenceError("import and save the selected backup data", error)
+      throw error
     }
   }
 
-  const handleDataSync = (syncedData: any) => {
-    if (Array.isArray(syncedData["ims_products"])) {
-      setProducts((prev) => mergeProductsById(normalizeProducts(syncedData["ims_products"]), prev))
-    }
-    if (Array.isArray(syncedData["ims_invoices"])) setInvoices(dedupeInvoices(syncedData["ims_invoices"]))
-    if (Array.isArray(syncedData["ims_users"])) setUsers((prev) => mergeUsers(syncedData["ims_users"], prev))
-    if (Array.isArray(syncedData["ims_guest_users"])) setGuestUsers((prev) => mergeUsers(syncedData["ims_guest_users"], prev))
-    if (Array.isArray(syncedData["ims_deals"])) setDeals((prev) => mergeDeals(syncedData["ims_deals"], prev))
-    if (Array.isArray(syncedData["ims_vendors"])) setVendors((prev) => mergeVendors(syncedData["ims_vendors"], prev))
-    if (Array.isArray(syncedData["ims_customers"])) {
-      setCustomers((prev) => mergeCustomers(syncedData["ims_customers"], prev))
-    }
-    if (syncedData["ims_trash"]) setTrashItems(syncedData["ims_trash"])
-  }
-
-  const handleMoveToTrash = (item: Product | Invoice | Deal | Vendor | Customer, type: TrashItem["type"]) => {
-    const newTrashItem: TrashItem = {
-      id: generateId(),
-      originalId: item.id,
-      type,
-      data: item,
-      deletedAt: getCurrentDateTime(),
-    }
-    setTrashItems((prev) => [...prev, newTrashItem])
-
+  const handleMoveToTrash = async (item: Product | Invoice | Deal | Vendor | Customer, type: TrashItem["type"]) => {
     if (type === "product") {
       setProducts((prev) => prev.filter((p) => p.id !== item.id))
     } else if (type === "invoice") {
@@ -918,71 +815,65 @@ function DashboardPageContent() {
     } else if (type === "customer") {
       setCustomers((prev) => prev.filter((c) => c.id !== item.id))
     }
+    try {
+      setTrashItems(await requestApi<TrashItem[]>("/api/trash"))
+    } catch (error) {
+      reportPersistenceError("refresh the trash", error)
+    }
     toast({ title: 'Moved to Trash', description: `${(item as any).name || item.id} moved to trash.` })
   }
 
-  const handleRecoverItem = (trashItemId: string) => {
+  const handleRecoverItem = async (trashItemId: string) => {
     const itemToRecover = trashItems.find((t) => t.id === trashItemId)
     if (!itemToRecover) return
 
-    const restore = async () => {
-      try {
-        await fetch('/api/trash', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: trashItemId }),
-        })
-      } catch (error) {
-        console.warn('Failed to restore trash item on server', error)
-      }
+    try {
+      const result = await requestApi<{ restored: unknown }>("/api/trash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: trashItemId }),
+      })
+      if (!result.restored) throw new Error("The item could not be restored from the database.")
+    } catch (error) {
+      reportPersistenceError("restore this item", error)
+      return
     }
 
-    if (itemToRecover.type === "product") {
-      setProducts((prev) => mergeProductsById([itemToRecover.data as Product], prev))
-    } else if (itemToRecover.type === "invoice") {
-      setInvoices((prev) => mergeInvoicesById([itemToRecover.data as Invoice], prev))
-    } else if (itemToRecover.type === "deal") {
-      setDeals((prev) => mergeDeals([itemToRecover.data as Deal], prev))
-    } else if (itemToRecover.type === "vendor") {
-      setVendors((prev) => mergeVendors([itemToRecover.data as Vendor], prev))
-    } else if (itemToRecover.type === "customer") {
-      setCustomers((prev) => mergeCustomers([itemToRecover.data as Customer], prev))
+    try {
+      await refreshDataFromDatabase()
+    } catch (error) {
+      reportPersistenceError("refresh data after restoring this item", error)
+      return
     }
-
     setTrashItems((prev) => prev.filter((t) => t.id !== trashItemId))
-    restore()
     toast({
       title: 'Item Recovered',
       description: `${(itemToRecover.data as any).name || itemToRecover.originalId} recovered.`,
     })
   }
 
-  const handleEmptyTrash = (itemIds?: string[]) => {
-    const removeTrash = async () => {
-      try {
-        const qs = itemIds?.map((id) => `id=${encodeURIComponent(id)}`).join('&')
-        await fetch(`/api/trash${qs ? `?${qs}` : ''}`, { method: 'DELETE' })
-      } catch (error) {
-        console.warn('Failed to permanently delete trash items on server', error)
+  const handleEmptyTrash = async (itemIds?: string[]) => {
+    try {
+      const query = itemIds?.map((id) => `id=${encodeURIComponent(id)}`).join("&")
+      await requestApi(`/api/trash${query ? `?${query}` : ""}`, { method: "DELETE" })
+      if (itemIds) {
+        setTrashItems((prev) => prev.filter((item) => !itemIds.includes(item.id)))
+        toast({ title: "Items Permanently Deleted", description: `${itemIds.length} items permanently deleted.` })
+      } else {
+        setTrashItems([])
+        toast({ title: "Trash Emptied", description: "All items in trash have been permanently deleted." })
       }
-    }
-
-    if (itemIds) {
-      setTrashItems((prev) => prev.filter((item) => !itemIds.includes(item.id)))
-      removeTrash()
-      toast({ title: 'Items Permanently Deleted', description: `${itemIds.length} items permanently deleted.` })
-    } else {
-      setTrashItems([])
-      removeTrash()
-      toast({ title: 'Trash Emptied', description: 'All items in trash have been permanently deleted.' })
+    } catch (error) {
+      reportPersistenceError("permanently delete the selected trash items", error)
     }
   }
 
-  const handleAddProduct = (newProduct: Product) => {
-    const create = async () => {
-      try {
-        const productPayload = {
-          id: newProduct.id,
+  const handleAddProduct = async (newProduct: Product) => {
+    try {
+      const result = await requestApi<{ product: Product }>("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           name: newProduct.name,
           description: newProduct.description,
           unitPrice: Number(newProduct.unitPrice) || 0,
@@ -991,34 +882,28 @@ function DashboardPageContent() {
           vendorId: newProduct.vendorId,
           category: newProduct.category,
           sku: newProduct.sku,
-        }
-        const res = await fetch('/api/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(productPayload),
-        })
-        const json = await res.json()
-        if (json.success && json.product) {
-          setProducts((prev) => mergeProductsById([normalizeProduct(json.product)], prev))
-        } else {
-          // fallback to local
-          setProducts((prev) => mergeProductsById([normalizeProduct(newProduct)], prev))
-        }
-      } catch (e) {
-        setProducts((prev) => mergeProductsById([normalizeProduct(newProduct)], prev))
-      }
+          purchaseHistory: newProduct.purchaseHistory,
+        }),
+      })
+      if (!result.product) throw new Error("The product was not returned by the database.")
+      setProducts((prev) => mergeProductsById([normalizeProduct(result.product)], prev))
+    } catch (error) {
+      reportPersistenceError("add this product", error)
+      return false
     }
-    create()
     toast({
       title: "Product Added",
       description: `${newProduct.name} has been added to inventory.`,
     })
+    return true
   }
 
-  const handleUpdateProduct = (updatedProduct: Product) => {
-    const update = async () => {
-      try {
-        const productPayload = {
+  const handleUpdateProduct = async (updatedProduct: Product): Promise<Product | null> => {
+    try {
+      const result = await requestApi<{ product: Product }>("/api/products", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           id: updatedProduct.id,
           name: updatedProduct.name,
           description: updatedProduct.description,
@@ -1028,45 +913,41 @@ function DashboardPageContent() {
           vendorId: updatedProduct.vendorId,
           category: updatedProduct.category,
           sku: updatedProduct.sku,
-        }
-        const res = await fetch('/api/products', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(productPayload),
-        })
-        const json = await res.json()
-        if (json.success && json.product) {
-          setProducts((prev) => mergeProductsById([normalizeProduct(json.product)], prev.filter((p) => p.id !== json.product.id)))
-        } else {
-          setProducts((prev) => mergeProductsById([normalizeProduct(updatedProduct)], prev.filter((p) => p.id !== updatedProduct.id)))
-        }
-      } catch (e) {
-        setProducts((prev) => mergeProductsById([normalizeProduct(updatedProduct)], prev.filter((p) => p.id !== updatedProduct.id)))
-      }
+          purchaseHistory: updatedProduct.purchaseHistory,
+        }),
+      })
+      if (!result.product) throw new Error("The product was not returned by the database.")
+      const savedProduct = normalizeProduct(result.product)
+      setProducts((prev) =>
+        mergeProductsById([savedProduct], prev.filter((product) => product.id !== savedProduct.id)),
+      )
+      toast({
+        title: "Product Updated",
+        description: `${savedProduct.name} has been saved to the database.`,
+      })
+      return savedProduct
+    } catch (error) {
+      reportPersistenceError("update this product", error)
     }
-    update()
-    toast({
-      title: "Product Updated",
-      description: `${updatedProduct.name} has been updated successfully.`,
-    })
+    return null
   }
 
-  const handleDeleteProduct = (productId: string, productName: string) => {
+  const handleDeleteProduct = async (productId: string, productName: string) => {
     const productToDelete = products.find((p) => p.id === productId)
-    if (productToDelete) {
-      const remove = async () => {
-        try {
-          await fetch(`/api/products?id=${productId}`, { method: 'DELETE' })
-        } catch (e) {
-          // ignore
-        }
-        handleMoveToTrash(productToDelete, "product")
-      }
-      remove()
+    if (!productToDelete) return
+    try {
+      const result = await requestApi<{ deleted: { id: string } | null }>(
+        `/api/products?id=${encodeURIComponent(productId)}`,
+        { method: "DELETE" },
+      )
+      if (!result.deleted) throw new Error("Product was not found in the database.")
+      await handleMoveToTrash(productToDelete, "product")
+    } catch (error) {
+      reportPersistenceError(`delete ${productName}`, error)
     }
   }
 
-  const handleCreateInvoice = (newInvoice: Omit<Invoice, "id" | "createdAt"> & { createdAt?: string }) => {
+  const handleCreateInvoice = async (newInvoice: Omit<Invoice, "id" | "createdAt"> & { createdAt?: string }) => {
     console.log("[v0] Creating invoice with date:", newInvoice.createdAt || "no createdAt")
 
     const invoiceDateString = newInvoice.createdAt || getCurrentDate()
@@ -1104,116 +985,116 @@ function DashboardPageContent() {
 
     console.log("[v0] New invoice ID:", invoiceId)
 
-    const create = async () => {
-      const payload = {
-        tracking_id: invoiceId,
-        customer_name: newInvoice.customerName,
-        customer_email: newInvoice.customerEmail,
-        customer_phone: newInvoice.customerPhone,
-        created_at: newInvoice.createdAt,
-        total_amount: newInvoice.totalAmount,
-        total_cost: newInvoice.totalCost,
-        total_profit: newInvoice.totalProfit,
-        profit_percentage: newInvoice.profitPercentage,
-        currency: newInvoice.currency,
-        status: newInvoice.status,
-        items: newInvoice.items?.map((it) => ({ product_id: it.productId, product_name: it.productName, quantity: it.quantity, unit_price: it.unitPrice, cost_price: it.costPrice })) || [],
-      }
-      try {
-        const res = await fetch('/api/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-        const json = await res.json()
-        if (json.success && json.invoice) {
-          setInvoices((prev) => mergeInvoicesById([json.invoice], prev))
-          await fetch('/api/daily-orders', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ invoice: json.invoice }),
-          })
-          toast({ title: 'Invoice Created', description: `Invoice ${invoiceId} has been created successfully for ${invoiceMonth}/${invoiceYear}!` })
-          return
-        }
-      } catch (e) {
-        console.error('Invoice create failed, falling back to local state', e)
-      }
-
-      // Fallback to local state
-      const completeInvoice: Invoice = {
-        ...newInvoice,
-        id: invoiceId,
-        createdAt: invoiceDateString,
-      }
-      setInvoices((prev) => mergeInvoicesById([completeInvoice], prev))
-      await fetch('/api/daily-orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invoice: completeInvoice }),
+    const payload = {
+      tracking_id: invoiceId,
+      customer_name: newInvoice.customerName,
+      customer_email: newInvoice.customerEmail,
+      customer_phone: newInvoice.customerPhone,
+      created_at: newInvoice.createdAt,
+      total_amount: newInvoice.totalAmount,
+      total_cost: newInvoice.totalCost,
+      total_profit: newInvoice.totalProfit,
+      profit_percentage: newInvoice.profitPercentage,
+      currency: newInvoice.currency,
+      status: newInvoice.status,
+      items: newInvoice.items?.map((item) => ({
+        product_id: item.productId,
+        product_name: item.productName,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        cost_price: item.costPrice,
+      })) || [],
+    }
+    try {
+      const result = await requestApi<{ invoice: Invoice }>("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       })
-      toast({ title: 'Invoice Created (local)', description: `Invoice ${invoiceId} saved locally.` })
+      if (!result.invoice) throw new Error("The invoice was not returned by the database.")
+      setInvoices((prev) => mergeInvoicesById([result.invoice], prev))
+      toast({
+        title: "Invoice Created",
+        description: `Invoice ${invoiceId} has been created successfully for ${invoiceMonth}/${invoiceYear}!`,
+      })
+    } catch (error) {
+      reportPersistenceError("create this invoice", error)
     }
-
-    create()
   }
 
-  const handleUpdateInvoice = (updatedInvoice: Invoice, saveToDb = true) => {
-    const update = async () => {
-      if (saveToDb) {
-        try {
-          const res = await fetch('/api/invoices', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedInvoice) })
-          const json = await res.json()
-          if (json.success && json.invoice) {
-            setInvoices((prev) => prev.map((inv) => (inv.id === updatedInvoice.id ? json.invoice : inv)))
-            await fetch('/api/daily-orders', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ invoice: json.invoice }),
-            })
-            setEditingInvoice(null)
-            toast({ title: 'Invoice Updated & Saved', description: `Invoice ${updatedInvoice.id} has been updated and saved to the database.` })
-            return
-          }
-        } catch (e) {
-          console.error('Invoice update failed, falling back to local state', e)
-        }
-      }
-      setInvoices((prev) => prev.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv)))
-      if (saveToDb) {
-        await fetch('/api/daily-orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ invoice: updatedInvoice }),
-        })
-        toast({ title: 'Invoice Updated (local fallback)', description: `Invoice ${updatedInvoice.id} updated locally — DB save failed.` })
-      } else {
-        toast({ title: 'Invoice Updated Locally', description: `Invoice ${updatedInvoice.id} updated in local state only.` })
-      }
+  const handleUpdateInvoice = async (updatedInvoice: Invoice) => {
+    try {
+      const result = await requestApi<{ invoice: Invoice }>("/api/invoices", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedInvoice),
+      })
+      if (!result.invoice) throw new Error("The invoice was not returned by the database.")
+      setInvoices((prev) => prev.map((invoice) => (invoice.id === updatedInvoice.id ? result.invoice : invoice)))
       setEditingInvoice(null)
+      toast({
+        title: "Invoice Updated",
+        description: `Invoice ${updatedInvoice.id} has been updated and saved to the database.`,
+      })
+    } catch (error) {
+      reportPersistenceError("update this invoice", error)
     }
-
-    update()
   }
 
-  const handleDeleteInvoice = (invoiceId: string) => {
+  const handleDeleteInvoice = async (invoiceId: string) => {
     const invoiceToDelete = invoices.find((inv) => inv.id === invoiceId)
-    if (invoiceToDelete) {
-      const remove = async () => {
-        try {
-          await fetch(`/api/invoices?id=${invoiceId}`, { method: 'DELETE' })
-          await fetch(`/api/daily-orders?invoiceId=${invoiceId}`, { method: 'DELETE' })
-        } catch (e) {
-          // ignore
-        }
-        handleMoveToTrash(invoiceToDelete, "invoice")
-      }
-      remove()
+    if (!invoiceToDelete) return
+    try {
+      const result = await requestApi<{ deleted: { id: string } | null }>(
+        `/api/invoices?id=${encodeURIComponent(invoiceId)}`,
+        { method: "DELETE" },
+      )
+      if (!result.deleted) throw new Error("Invoice was not found in the database.")
+      await handleMoveToTrash(invoiceToDelete, "invoice")
+    } catch (error) {
+      reportPersistenceError(`delete invoice ${invoiceId}`, error)
     }
   }
 
-  const handleAddInvoices = (newInvoices: Invoice[]) => {
-    setInvoices((prev) => mergeInvoicesById(newInvoices, prev))
-    toast({
-      title: "Invoices Imported",
-      description: `Successfully imported ${newInvoices.length} invoices from Excel.`,
-    })
+  const handleAddInvoices = async (newInvoices: Invoice[]) => {
+    const savedInvoices: Invoice[] = []
+    try {
+      for (const invoice of newInvoices) {
+        const result = await requestApi<{ invoice: Invoice }>("/api/invoices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tracking_id: invoice.trackingId || invoice.id,
+            customer_name: invoice.customerName,
+            customer_email: invoice.customerEmail,
+            customer_phone: invoice.customerPhone,
+            created_at: invoice.createdAt,
+            total_amount: invoice.totalAmount,
+            total_cost: invoice.totalCost,
+            total_profit: invoice.totalProfit,
+            profit_percentage: invoice.profitPercentage,
+            currency: invoice.currency,
+            status: invoice.status,
+            items: invoice.items.map((item) => ({
+              product_id: item.productId,
+              product_name: item.productName,
+              quantity: item.quantity,
+              unit_price: item.unitPrice,
+              cost_price: item.costPrice,
+            })),
+          }),
+        })
+        if (!result.invoice) throw new Error(`Invoice ${invoice.id} was not returned by the database.`)
+        savedInvoices.push(result.invoice)
+      }
+    } catch (error) {
+      if (savedInvoices.length > 0) setInvoices((prev) => mergeInvoicesById(savedInvoices, prev))
+      reportPersistenceError(`import invoices (${savedInvoices.length} of ${newInvoices.length} saved)`, error)
+      return false
+    }
+    setInvoices((prev) => mergeInvoicesById(savedInvoices, prev))
+    toast({ title: "Invoices Imported", description: `Successfully imported ${savedInvoices.length} invoices.` })
+    return true
   }
 
   const handleViewInvoice = (invoice: Invoice) => {
@@ -1225,14 +1106,9 @@ function DashboardPageContent() {
   }
 
   const handleMarkInvoiceAsPaid = (invoiceId: string) => {
-    const updatedInvoices: Invoice[] = invoices.map((inv) =>
-      inv.id === invoiceId ? ({ ...inv, status: "completed" } as Invoice) : inv,
-    )
-    setInvoices(updatedInvoices)
-    toast({
-      title: "Invoice Marked as Paid",
-      description: `Invoice ${invoiceId} has been marked as completed.`,
-    })
+    const invoice = invoices.find((item) => item.id === invoiceId)
+    if (!invoice) return
+    handleUpdateInvoice({ ...invoice, status: "completed" })
   }
 
   const handleDownloadPdf = async (invoice: Invoice) => {
@@ -1404,60 +1280,57 @@ function DashboardPageContent() {
     }
   }
 
-  const handleAddDeal = (newDeal: Deal) => {
-    const create = async () => {
-      try {
-        const res = await fetch('/api/deals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newDeal) })
-        const json = await res.json()
-        if (json.success && json.deal) {
-          setDeals((prev) => mergeDeals([json.deal], prev))
-          return
-        }
-      } catch (e) {
-        // fallback to local
-      }
-      setDeals((prev) => mergeDeals([{ ...newDeal, createdAt: getCurrentDate() }], prev))
+  const handleAddDeal = async (newDeal: Deal) => {
+    try {
+      const result = await requestApi<{ deal: Deal }>("/api/deals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newDeal),
+      })
+      if (!result.deal) throw new Error("The deal was not returned by the database.")
+      setDeals((prev) => mergeDeals([result.deal], prev))
+    } catch (error) {
+      reportPersistenceError("create this deal", error)
+      return false
     }
-    create()
     toast({
       title: "Deal Created",
       description: `${newDeal.name} has been added.`,
     })
+    return true
   }
 
-  const handleUpdateDeal = (updatedDeal: Deal) => {
-    const update = async () => {
-      try {
-        const res = await fetch('/api/deals', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedDeal) })
-        const json = await res.json()
-        if (json.success && json.deal) {
-          setDeals((prev) => mergeDeals([json.deal], prev.filter((d) => d.id !== json.deal.id)))
-          return
-        }
-      } catch (e) {
-        // fallback
-      }
-      setDeals((prev) => mergeDeals([updatedDeal], prev.filter((d) => d.id !== updatedDeal.id)))
+  const handleUpdateDeal = async (updatedDeal: Deal) => {
+    try {
+      const result = await requestApi<{ deal: Deal }>("/api/deals", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedDeal),
+      })
+      if (!result.deal) throw new Error("The deal was not returned by the database.")
+      setDeals((prev) => mergeDeals([result.deal], prev.filter((deal) => deal.id !== result.deal.id)))
+    } catch (error) {
+      reportPersistenceError("update this deal", error)
+      return
     }
-    update()
     toast({
       title: "Deal Updated",
       description: `${updatedDeal.name} has been updated.`,
     })
   }
 
-  const handleDeleteDeal = (dealId: string) => {
+  const handleDeleteDeal = async (dealId: string) => {
     const dealToDelete = deals.find((d) => d.id === dealId)
-    if (dealToDelete) {
-      const remove = async () => {
-        try {
-          await fetch(`/api/deals?id=${dealId}`, { method: 'DELETE' })
-        } catch (e) {
-          // ignore
-        }
-        handleMoveToTrash(dealToDelete, "deal")
-      }
-      remove()
+    if (!dealToDelete) return
+    try {
+      const result = await requestApi<{ deleted: { id: string } | null }>(
+        `/api/deals?id=${encodeURIComponent(dealId)}`,
+        { method: "DELETE" },
+      )
+      if (!result.deleted) throw new Error("Deal was not found in the database.")
+      await handleMoveToTrash(dealToDelete, "deal")
+    } catch (error) {
+      reportPersistenceError("delete this deal", error)
     }
   }
 
@@ -1575,73 +1448,68 @@ function DashboardPageContent() {
     }
   }
 
-  const handleAddVendor = (newVendor: Vendor) => {
-    const create = async () => {
-      try {
-        const res = await fetch('/api/vendors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newVendor) })
-        const json = await res.json()
-        if (json.success && json.vendor) {
-          setVendors((prev) => mergeVendors([json.vendor], prev))
-          return
-        }
-      } catch (e) {
-        // fallback
-      }
-      setVendors((prev) => mergeVendors([newVendor], prev))
+  const handleAddVendor = async (newVendor: Vendor) => {
+    try {
+      const result = await requestApi<{ vendor: Vendor }>("/api/vendors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newVendor),
+      })
+      if (!result.vendor) throw new Error("The vendor was not returned by the database.")
+      setVendors((prev) => mergeVendors([result.vendor], prev))
+      return true
+    } catch (error) {
+      reportPersistenceError("add this vendor", error)
+      return false
     }
-    create()
   }
 
-  const handleUpdateVendor = (updatedVendor: Vendor) => {
-    const update = async () => {
-      try {
-        const res = await fetch('/api/vendors', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedVendor) })
-        const json = await res.json()
-        if (json.success && json.vendor) {
-          setVendors((prev) => mergeVendors([json.vendor], prev.filter((v) => v.id !== json.vendor.id)))
-          return
-        }
-      } catch (e) {
-        // fallback
-      }
-      setVendors((prev) => mergeVendors([updatedVendor], prev.filter((v) => v.id !== updatedVendor.id)))
+  const handleUpdateVendor = async (updatedVendor: Vendor) => {
+    try {
+      const result = await requestApi<{ vendor: Vendor }>("/api/vendors", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedVendor),
+      })
+      if (!result.vendor) throw new Error("The vendor was not returned by the database.")
+      setVendors((prev) => mergeVendors([result.vendor], prev.filter((vendor) => vendor.id !== result.vendor.id)))
+    } catch (error) {
+      reportPersistenceError("update this vendor", error)
     }
-    update()
   }
 
-  const handleDeleteVendor = (vendorId: string) => {
+  const handleDeleteVendor = async (vendorId: string) => {
     const vendorToDelete = vendors.find((v) => v.id === vendorId)
-    if (vendorToDelete) {
-      const remove = async () => {
-        try {
-          await fetch(`/api/vendors?id=${vendorId}`, { method: 'DELETE' })
-        } catch (e) {
-          // ignore
-        }
-        handleMoveToTrash(vendorToDelete, "vendor")
-      }
-      remove()
+    if (!vendorToDelete) return
+    try {
+      const result = await requestApi<{ deleted: { id: string } | null }>(
+        `/api/vendors?id=${encodeURIComponent(vendorId)}`,
+        { method: "DELETE" },
+      )
+      if (!result.deleted) throw new Error("Vendor was not found in the database.")
+      await handleMoveToTrash(vendorToDelete, "vendor")
+    } catch (error) {
+      reportPersistenceError("delete this vendor", error)
     }
   }
 
-  const handleAddCustomer = (newCustomer: Customer) => {
-    const create = async () => {
-      try {
-        const res = await fetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCustomer) })
-        const json = await res.json()
-        if (json.success && json.customer) {
-          setCustomers((prev) => mergeCustomers([json.customer], prev))
-          return
-        }
-      } catch (e) {
-        // fallback
-      }
-      setCustomers((prev) => mergeCustomers([newCustomer], prev))
+  const handleAddCustomer = async (newCustomer: Customer) => {
+    try {
+      const result = await requestApi<{ customer: Customer }>("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCustomer),
+      })
+      if (!result.customer) throw new Error("The customer was not returned by the database.")
+      setCustomers((prev) => mergeCustomers([result.customer], prev))
+      return true
+    } catch (error) {
+      reportPersistenceError("add this customer", error)
+      return false
     }
-    create()
   }
 
-  const handleUpsertCustomerFromPostOfficeRecord = (record: PostOfficeRecord) => {
+  const handleUpsertCustomerFromPostOfficeRecord = async (record: PostOfficeRecord) => {
     const normalizedName = record.customerName.trim()
     const normalizedPhone = record.phone.trim()
     const normalizedAddress = record.customerAddress.trim()
@@ -1667,100 +1535,179 @@ function DashboardPageContent() {
     }
 
     if (existingCustomer) {
-      handleUpdateCustomer(customerPayload)
-      return
+      return handleUpdateCustomer(customerPayload)
     }
 
-    handleAddCustomer(customerPayload)
+    return handleAddCustomer(customerPayload)
   }
 
-  const handleAddPostOfficeRecord = (newRecord: PostOfficeRecord) => {
-    handleUpsertCustomerFromPostOfficeRecord(newRecord)
-
-    const create = async () => {
-      try {
-        const res = await fetch('/api/post-office', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newRecord),
-        })
-        const json = await res.json()
-        if (json.success && json.record) {
-          persistPostOfficeRecords((prev) => [json.record, ...prev])
-          return
-        }
-      } catch (e) {
-        console.warn('Post office record create failed, falling back to local state', e)
-      }
-      persistPostOfficeRecords((prev) => [newRecord, ...prev])
+  const handleAddPostOfficeRecord = async (newRecord: PostOfficeRecord) => {
+    try {
+      if (!(await handleUpsertCustomerFromPostOfficeRecord(newRecord))) return
+      const result = await requestApi<{ record: PostOfficeRecord }>("/api/post-office", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newRecord),
+      })
+      if (!result.record) throw new Error("The post office record was not returned by the database.")
+      persistPostOfficeRecords((prev) => [result.record, ...prev])
+    } catch (error) {
+      reportPersistenceError("save this post office record", error)
     }
-    create()
   }
 
-  const handleUpdatePostOfficeRecord = (updatedRecord: PostOfficeRecord) => {
-    handleUpsertCustomerFromPostOfficeRecord(updatedRecord)
-
-    const update = async () => {
-      try {
-        const res = await fetch('/api/post-office', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedRecord),
-        })
-        const json = await res.json()
-        if (json.success && json.record) {
-          persistPostOfficeRecords((prev) => prev.map((record) => (record.id === updatedRecord.id ? json.record : record)))
-          return
-        }
-      } catch (e) {
-        console.warn('Post office record update failed, falling back to local state', e)
-      }
-      persistPostOfficeRecords((prev) => prev.map((record) => (record.id === updatedRecord.id ? updatedRecord : record)))
+  const handleUpdatePostOfficeRecord = async (updatedRecord: PostOfficeRecord) => {
+    try {
+      if (!(await handleUpsertCustomerFromPostOfficeRecord(updatedRecord))) return
+      const result = await requestApi<{ record: PostOfficeRecord }>("/api/post-office", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedRecord),
+      })
+      if (!result.record) throw new Error("The post office record was not returned by the database.")
+      persistPostOfficeRecords((prev) =>
+        prev.map((record) => (record.id === updatedRecord.id ? result.record : record)),
+      )
+    } catch (error) {
+      reportPersistenceError("update this post office record", error)
     }
-    update()
   }
 
-  const handleDeletePostOfficeRecord = (recordId: string) => {
-    const remove = async () => {
-      try {
-        await fetch(`/api/post-office?id=${recordId}`, { method: 'DELETE' })
-      } catch (e) {
-        console.warn('Failed to delete post office record on server', e)
-      }
+  const handleDeletePostOfficeRecord = async (recordId: string) => {
+    try {
+      const result = await requestApi<{ deleted: { id: string } | null }>(
+        `/api/post-office?id=${encodeURIComponent(recordId)}`,
+        { method: "DELETE" },
+      )
+      if (!result.deleted) throw new Error("Post office record was not found in the database.")
       persistPostOfficeRecords((prev) => prev.filter((record) => record.id !== recordId))
+    } catch (error) {
+      reportPersistenceError("delete this post office record", error)
     }
-    remove()
   }
 
-  const handleUpdateCustomer = (updatedCustomer: Customer) => {
-    const update = async () => {
-      try {
-        const res = await fetch('/api/customers', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedCustomer) })
-        const json = await res.json()
-        if (json.success && json.customer) {
-          setCustomers((prev) => mergeCustomers([json.customer], prev.filter((c) => c.id !== json.customer.id)))
-          return
-        }
-      } catch (e) {
-        // fallback
-      }
-      setCustomers((prev) => mergeCustomers([updatedCustomer], prev.filter((c) => c.id !== updatedCustomer.id)))
+  const handleUpdateCustomer = async (updatedCustomer: Customer) => {
+    try {
+      const result = await requestApi<{ customer: Customer }>("/api/customers", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedCustomer),
+      })
+      if (!result.customer) throw new Error("The customer was not returned by the database.")
+      setCustomers((prev) =>
+        mergeCustomers([result.customer], prev.filter((customer) => customer.id !== result.customer.id)),
+      )
+      return true
+    } catch (error) {
+      reportPersistenceError("update this customer", error)
+      return false
     }
-    update()
   }
 
-  const handleDeleteCustomer = (customerId: string) => {
+  const handleDeleteCustomer = async (customerId: string) => {
     const customerToDelete = customers.find((c) => c.id === customerId)
-    if (customerToDelete) {
-      const remove = async () => {
-        try {
-          await fetch(`/api/customers?id=${customerId}`, { method: 'DELETE' })
-        } catch (e) {
-          // ignore
-        }
-        handleMoveToTrash(customerToDelete, "customer")
-      }
-      remove()
+    if (!customerToDelete) return
+    try {
+      const result = await requestApi<{ deleted: { id: string } | null }>(
+        `/api/customers?id=${encodeURIComponent(customerId)}`,
+        { method: "DELETE" },
+      )
+      if (!result.deleted) throw new Error("Customer was not found in the database.")
+      await handleMoveToTrash(customerToDelete, "customer")
+    } catch (error) {
+      reportPersistenceError("delete this customer", error)
+    }
+  }
+
+  const handleAddManagedUser = async (managedUser: AuthUser, password: string) => {
+    try {
+      const result = await requestApi<{ user: AuthUser }>("/api/admin-users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "user", ...managedUser, password }),
+      })
+      if (!result.user) throw new Error("The user was not returned by the database.")
+      setUsers((current) => mergeUsers([result.user], current))
+      toast({ title: "User Added", description: `${result.user.name} has been saved to the database.` })
+      return true
+    } catch (error) {
+      reportPersistenceError("add this user", error)
+      return false
+    }
+  }
+
+  const handleUpdateManagedUser = async (managedUser: AuthUser) => {
+    try {
+      const result = await requestApi<{ user: AuthUser }>("/api/admin-users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "user", ...managedUser }),
+      })
+      if (!result.user) throw new Error("The user was not returned by the database.")
+      setUsers((current) => mergeUsers([result.user], current.filter((item) => item.id !== result.user.id)))
+      toast({ title: "User Updated", description: `${result.user.name}'s changes were saved to the database.` })
+      return true
+    } catch (error) {
+      reportPersistenceError("update this user", error)
+      return false
+    }
+  }
+
+  const handleDeleteManagedUser = async (id: string) => {
+    try {
+      await requestApi(`/api/admin-users?id=${encodeURIComponent(id)}&type=user`, { method: "DELETE" })
+      setUsers((current) => current.filter((item) => item.id !== id))
+      toast({ title: "User Deleted", description: "User has been removed from the database." })
+      return true
+    } catch (error) {
+      reportPersistenceError("delete this user", error)
+      return false
+    }
+  }
+
+  const handleAddGuest = async (guest: AuthUser) => {
+    try {
+      const result = await requestApi<{ guest: AuthUser }>("/api/admin-users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "guest", ...guest }),
+      })
+      if (!result.guest) throw new Error("The guest was not returned by the database.")
+      setGuestUsers((current) => mergeUsers([result.guest], current))
+      toast({ title: "Guest Added", description: `${result.guest.name} has been saved to the database.` })
+      return true
+    } catch (error) {
+      reportPersistenceError("add this guest", error)
+      return false
+    }
+  }
+
+  const handleUpdateGuest = async (guest: AuthUser) => {
+    try {
+      const result = await requestApi<{ guest: AuthUser }>("/api/admin-users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "guest", ...guest }),
+      })
+      if (!result.guest) throw new Error("The guest was not returned by the database.")
+      setGuestUsers((current) => mergeUsers([result.guest], current.filter((item) => item.id !== result.guest.id)))
+      toast({ title: "Guest Updated", description: `${result.guest.name}'s changes were saved to the database.` })
+      return true
+    } catch (error) {
+      reportPersistenceError("update this guest", error)
+      return false
+    }
+  }
+
+  const handleDeleteGuest = async (id: string) => {
+    try {
+      await requestApi(`/api/admin-users?id=${encodeURIComponent(id)}&type=guest`, { method: "DELETE" })
+      setGuestUsers((current) => current.filter((guest) => guest.id !== id))
+      toast({ title: "Guest Deleted", description: "Guest has been removed from the database." })
+      return true
+    } catch (error) {
+      reportPersistenceError("delete this guest", error)
+      return false
     }
   }
 
@@ -1769,7 +1716,6 @@ function DashboardPageContent() {
       <GuestLoginForm
         onLoginSuccess={handleGuestLoginSuccess}
         onBackToMainLogin={handleBackToMainLogin}
-        guestUsers={guestUsers}
       />
     )
   }
@@ -1788,7 +1734,6 @@ function DashboardPageContent() {
         onLoginSuccess={handleLoginSuccess}
         onForgotPassword={handleForgotPassword}
         onGuestLogin={handleGuestLogin}
-        guestUsers={guestUsers}
       />
     )
   }
@@ -2113,27 +2058,17 @@ function DashboardPageContent() {
         {activeTab === "users" && (
           <UserManagement
             users={users}
-            onAddUser={(user) => {
-              setUsers((prev) => mergeUsers([{ ...user, createdAt: getCurrentDate() }], prev))
-            }}
-            onUpdateUser={(user) => setUsers((prev) => mergeUsers([user], prev.filter((u) => u.id !== user.id)))}
-            onDeleteUser={(id) => {
-              setUsers((prev) => prev.filter((u) => u.id !== id))
-              toast({ title: "User Deleted", description: "User has been permanently removed." })
-            }}
+            onAddUser={handleAddManagedUser}
+            onUpdateUser={handleUpdateManagedUser}
+            onDeleteUser={handleDeleteManagedUser}
           />
         )}
         {activeTab === "guests" && (
           <GuestManagement
             guestUsers={guestUsers}
-            onAddGuest={(guest) => {
-              setGuestUsers((prev) => mergeUsers([{ ...guest, createdAt: getCurrentDate() }], prev))
-            }}
-            onUpdateGuest={(guest) => setGuestUsers((prev) => mergeUsers([guest], prev.filter((g) => g.id !== guest.id)))}
-            onDeleteGuest={(id) => {
-              setGuestUsers((prev) => prev.filter((g) => g.id !== id))
-              toast({ title: "Guest Deleted", description: "Guest has been permanently removed." })
-            }}
+            onAddGuest={handleAddGuest}
+            onUpdateGuest={handleUpdateGuest}
+            onDeleteGuest={handleDeleteGuest}
           />
         )}
         {activeTab === "vendors" && (
@@ -2190,21 +2125,29 @@ function DashboardPageContent() {
           <div className="space-y-6">
             <AppSettings onCurrencyChange={setCurrentAppCurrency} onDataSync={handleDataSync} />
             <PDFUploadParser
-              onProductsExtracted={(products) => {
-                setProducts((prev) => [...prev, ...products])
-                toast({ title: "Products Imported", description: `${products.length} products added from PDF.` })
+              onProductsExtracted={async (products) => {
+                let savedCount = 0
+                for (const product of products) {
+                  if (await handleAddProduct(normalizeProduct(product))) savedCount += 1
+                }
+                toast({ title: "Products Imported", description: `${savedCount} of ${products.length} products saved.` })
               }}
-              onInvoicesExtracted={(invoices) => {
-                setInvoices((prev) => mergeInvoicesById(invoices, prev))
-                toast({ title: "Invoices Imported", description: `${invoices.length} invoices added from PDF.` })
+              onInvoicesExtracted={async (invoices) => {
+                await handleAddInvoices(invoices)
               }}
-              onVendorsExtracted={(vendors) => {
-                setVendors((prev) => [...prev, ...vendors])
-                toast({ title: "Vendors Imported", description: `${vendors.length} vendors added from PDF.` })
+              onVendorsExtracted={async (vendors) => {
+                let savedCount = 0
+                for (const vendor of vendors) {
+                  if (await handleAddVendor(vendor)) savedCount += 1
+                }
+                toast({ title: "Vendors Imported", description: `${savedCount} of ${vendors.length} vendors saved.` })
               }}
-              onCustomersExtracted={(customers) => {
-                setCustomers((prev) => [...prev, ...customers])
-                toast({ title: "Customers Imported", description: `${customers.length} customers added from PDF.` })
+              onCustomersExtracted={async (customers) => {
+                let savedCount = 0
+                for (const customer of customers) {
+                  if (await handleAddCustomer(customer)) savedCount += 1
+                }
+                toast({ title: "Customers Imported", description: `${savedCount} of ${customers.length} customers saved.` })
               }}
             />
           </div>

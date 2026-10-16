@@ -26,6 +26,7 @@ export async function PUT(request: Request) {
     const { id, ...payload } = body
     if (!id) return NextResponse.json({ success: false, error: "Invoice id required" }, { status: 400 })
     const updated = await updateInvoice(id, payload)
+    if (!updated) return NextResponse.json({ success: false, error: "Invoice not found" }, { status: 404 })
     return NextResponse.json({ success: true, invoice: updated })
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to update invoice" }, { status: 500 })
@@ -38,6 +39,7 @@ export async function DELETE(request: Request) {
     const id = searchParams.get("id")
     if (!id) return NextResponse.json({ success: false, error: "Invoice id is required" }, { status: 400 })
     const deleted = await deleteInvoice(id)
+    if (!deleted) return NextResponse.json({ success: false, error: "Invoice not found" }, { status: 404 })
     return NextResponse.json({ success: true, deleted })
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unable to delete invoice" }, { status: 500 })

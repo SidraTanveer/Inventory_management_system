@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { formatCurrency, getCurrentDate } from "@/lib/utils"
 import { buildSearchableCustomers, getKeywordSuggestions, searchAndRank } from "@/lib/search-utils"
-import { Plus, Minus, Search, X, Hash, RefreshCw, User, Calendar, Database, HardDrive } from "lucide-react"
+import { Plus, Minus, Search, X, Hash, RefreshCw, User, Calendar, Database } from "lucide-react"
 import type { Product, Invoice, InvoiceItem, Customer } from "@/types/app"
 
 interface InvoiceEditDialogProps {
@@ -20,7 +20,7 @@ interface InvoiceEditDialogProps {
   existingInvoices: Invoice[]
   isOpen: boolean
   onClose: () => void
-  onSave: (invoice: Invoice, saveToDb: boolean) => void
+  onSave: (invoice: Invoice) => void
   currentAppCurrency: string
   user: any
 }
@@ -223,10 +223,10 @@ export function InvoiceEditDialog({
     setShowDbConfirm(true)
   }
 
-  const handleConfirmSave = (saveToDb: boolean) => {
+  const handleConfirmSave = () => {
     if (!pendingInvoice) return
     setShowDbConfirm(false)
-    onSave(pendingInvoice, saveToDb)
+    onSave(pendingInvoice)
     setPendingInvoice(null)
   }
 
@@ -649,10 +649,10 @@ export function InvoiceEditDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-bold text-gray-900">
               <Database className="h-5 w-5 text-orange-600" />
-              Save to Database?
+              Save Invoice Changes?
             </DialogTitle>
             <DialogDescription className="text-slate-600 mt-2">
-              Do you want to save the updated invoice{" "}
+              Save the updated invoice{" "}
               <span className="font-semibold text-orange-700">{pendingInvoice?.id}</span> to your database?
               <br />
               <span className="text-sm text-slate-500 mt-1 block">
@@ -663,18 +663,20 @@ export function InvoiceEditDialog({
           <DialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
             <Button
               variant="outline"
-              onClick={() => handleConfirmSave(false)}
+              onClick={() => {
+                setShowDbConfirm(false)
+                setPendingInvoice(null)
+              }}
               className="flex items-center gap-2 border-slate-300 text-slate-700 hover:bg-slate-50"
             >
-              <HardDrive className="h-4 w-4" />
-              Save Locally Only
+              Cancel
             </Button>
             <Button
-              onClick={() => handleConfirmSave(true)}
+              onClick={handleConfirmSave}
               className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white"
             >
               <Database className="h-4 w-4" />
-              Yes, Save to Database
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>

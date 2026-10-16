@@ -39,6 +39,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Post office record id required" }, { status: 400 })
     }
     const updated = await updatePostOfficeRecord(id, payload)
+    if (!updated) return NextResponse.json({ success: false, error: "Post office record not found" }, { status: 404 })
     return NextResponse.json({ success: true, record: updated })
   } catch (error) {
     return NextResponse.json(
@@ -56,6 +57,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: "Post office record id is required" }, { status: 400 })
     }
     const deleted = await deletePostOfficeRecord(id)
+    if (!deleted) return NextResponse.json({ success: false, error: "Post office record not found" }, { status: 404 })
     return NextResponse.json({ success: true, deleted })
   } catch (error) {
     return NextResponse.json(

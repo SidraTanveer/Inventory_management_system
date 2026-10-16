@@ -1,8 +1,19 @@
-import { NextResponse } from "next/server"
-import { approveSignupRequest, getLoginRequests, updateLoginRequestStatus } from "@/lib/auth"
+import { NextRequest, NextResponse } from "next/server"
+import { approveSignupRequest, findUserById, getLoginRequests, updateLoginRequestStatus } from "@/lib/auth"
+import { verifyAuthSession } from "@/lib/auth-session"
 
-export async function GET() {
+async function authorizeAdmin(request: NextRequest) {
+  const session = verifyAuthSession(request.cookies.get("ims_session")?.value)
+  if (!session || session.role !== "admin") return false
+  const user = await findUserById(session.userId)
+  return user?.role === "admin"
+}
+
+export async function GET(request: NextRequest) {
   try {
+    if (!(await authorizeAdmin(request))) {
+      return NextResponse.json({ success: false, error: "Administrator login is required." }, { status: 401 })
+    }
     const requests = await getLoginRequests()
     return NextResponse.json(requests)
   } catch (error) {
@@ -16,8 +27,11 @@ export async function GET() {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
+    if (!(await authorizeAdmin(request))) {
+      return NextResponse.json({ success: false, error: "Administrator login is required." }, { status: 401 })
+    }
     const body = await request.json()
     const { id, action } = body
 
