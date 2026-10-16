@@ -897,10 +897,7 @@ function DashboardPageContent() {
       return false
     }
     savingToast.dismiss()
-    toast({
-      title: "Product Saved",
-      description: `${newProduct.name} was saved to the database and added to inventory.`,
-    })
+    window.alert(`${newProduct.name} was saved to the database and added to inventory.`)
     return true
   }
 
@@ -932,10 +929,7 @@ function DashboardPageContent() {
         mergeProductsById([savedProduct], prev.filter((product) => product.id !== savedProduct.id)),
       )
       savingToast.dismiss()
-      toast({
-        title: "Product Changes Saved",
-        description: `${savedProduct.name} was successfully updated in the database.`,
-      })
+      window.alert(`${savedProduct.name} was successfully updated in the database.`)
       return savedProduct
     } catch (error) {
       savingToast.dismiss()
