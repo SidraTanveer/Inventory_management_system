@@ -183,7 +183,10 @@ export async function createInvoice(payload: any) {
 
 export async function updateInvoice(trackingIdOrId: string, payload: any) {
   return transaction(async (client) => {
-    const find = await client.query(`SELECT id, tracking_id FROM invoices WHERE tracking_id=$1 OR id=$1`, [trackingIdOrId])
+    const find = await client.query(
+      `SELECT id, tracking_id FROM invoices WHERE tracking_id=$1 OR id::text=$1`,
+      [trackingIdOrId],
+    )
     const row = find.rows[0]
     if (!row) return null
 
@@ -234,7 +237,10 @@ export async function updateInvoice(trackingIdOrId: string, payload: any) {
 
 export async function deleteInvoice(trackingIdOrId: string) {
   return transaction(async (client) => {
-    const find = await client.query(`SELECT id FROM invoices WHERE tracking_id=$1 OR id=$1`, [trackingIdOrId])
+    const find = await client.query(
+      `SELECT id FROM invoices WHERE tracking_id=$1 OR id::text=$1`,
+      [trackingIdOrId],
+    )
     const row = find.rows[0]
     if (!row) return null
     const invoice = await client.query(`SELECT * FROM invoices WHERE id=$1`, [row.id])
