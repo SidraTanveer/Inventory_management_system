@@ -37,6 +37,7 @@ export interface Invoice {
   customerPhone: string
   items: InvoiceItem[]
   totalAmount: number
+  deliveryCharges: number
   totalCost: number
   totalProfit: number
   profitPercentage: number

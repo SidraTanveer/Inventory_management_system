@@ -75,6 +75,7 @@ export function InvoiceEditDialog({
   const [trackingId, setTrackingId] = useState(invoice.trackingId || "")
   const [status, setStatus] = useState<Invoice["status"]>(invoice.status)
   const [items, setItems] = useState<InvoiceItem[]>(invoice.items)
+  const [deliveryCharges, setDeliveryCharges] = useState(String(invoice.deliveryCharges ?? 0))
   const [productSearchTerm, setProductSearchTerm] = useState("")
   const [customerSearchTerm, setCustomerSearchTerm] = useState("")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
@@ -213,6 +214,7 @@ export function InvoiceEditDialog({
       status,
       items,
       totalAmount,
+      deliveryCharges: Number(deliveryCharges) || 0,
       totalCost,
       totalProfit,
       profitPercentage,
@@ -237,6 +239,7 @@ export function InvoiceEditDialog({
     setTrackingId(invoice.trackingId || "")
     setStatus(invoice.status)
     setItems(invoice.items)
+    setDeliveryCharges(String(invoice.deliveryCharges ?? 0))
     setProductSearchTerm("")
     setCustomerSearchTerm("")
     setSelectedCustomer(null)
@@ -256,6 +259,7 @@ export function InvoiceEditDialog({
       setTrackingId(invoice.trackingId || "")
       setStatus(invoice.status)
       setItems(invoice.items)
+      setDeliveryCharges(String(invoice.deliveryCharges ?? 0))
       setInvoiceDate(getDatePart(invoice.createdAt))
       setInvoiceTime(getTimePart(invoice.createdAt))
 
@@ -596,35 +600,60 @@ export function InvoiceEditDialog({
 
           {/* Invoice Summary */}
           {items.length > 0 && (
-            <Card className="bg-white border-2 border-gray-200">
-              <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100">
-                <CardTitle className="text-gray-900">Invoice Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 bg-white">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-gray-900">
-                    <span className="font-semibold">Total Cost:</span>
-                    <span className="text-red-600 font-bold">{formatCurrency(totalCost, currentAppCurrency)}</span>
+            <>
+            <div className="max-w-sm space-y-2">
+              <Label htmlFor="editDeliveryCharges">Delivery Charges (separate from profit)</Label>
+              <Input
+                id="editDeliveryCharges"
+                type="number"
+                min="0"
+                step="0.01"
+                value={deliveryCharges}
+                onChange={(event) => setDeliveryCharges(event.target.value)}
+              />
+            </div>
+              <Card className="bg-white border-2 border-gray-200">
+                <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100">
+                  <CardTitle className="text-gray-900">Invoice Summary</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6 bg-white">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-gray-900">
+                      <span className="font-semibold">Total Cost:</span>
+                      <span className="text-red-600 font-bold">{formatCurrency(totalCost, currentAppCurrency)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-900">
+                      <span className="font-semibold">Products Subtotal:</span>
+                      <span className="font-bold text-lg">{formatCurrency(totalAmount, currentAppCurrency)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-900">
+                      <span className="font-semibold">Delivery Charges:</span>
+                      <span className="font-bold text-lg">
+                        {formatCurrency(Number(deliveryCharges) || 0, currentAppCurrency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-gray-900">
+                      <span className="font-semibold">Customer Total:</span>
+                      <span className="font-bold text-lg">
+                        {formatCurrency(totalAmount + (Number(deliveryCharges) || 0), currentAppCurrency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-gray-900">
+                      <span className="font-semibold">Total Profit:</span>
+                      <span className={`font-bold text-lg ${totalProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {formatCurrency(totalProfit, currentAppCurrency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-gray-900">
+                      <span className="font-semibold">Profit Margin:</span>
+                      <span className={`font-bold ${profitPercentage >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {profitPercentage.toFixed(2)}%
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-gray-900">
-                    <span className="font-semibold">Total Amount:</span>
-                    <span className="font-bold text-lg">{formatCurrency(totalAmount, currentAppCurrency)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-900">
-                    <span className="font-semibold">Total Profit:</span>
-                    <span className={`font-bold text-lg ${totalProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                      {formatCurrency(totalProfit, currentAppCurrency)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-gray-900">
-                    <span className="font-semibold">Profit Margin:</span>
-                    <span className={`font-bold ${profitPercentage >= 0 ? "text-green-600" : "text-red-600"}`}>
-                      {profitPercentage.toFixed(2)}%
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </>
           )}
 
           {/* Action Buttons */}

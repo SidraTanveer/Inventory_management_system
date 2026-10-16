@@ -286,6 +286,7 @@ const mockInvoices: Invoice[] = [
       },
     ],
     totalAmount: 1495000,
+    deliveryCharges: 0,
     totalCost: 1124800,
     totalProfit: 370200,
     profitPercentage: 24.8,
@@ -310,6 +311,7 @@ const mockInvoices: Invoice[] = [
       { productId: "prod-2", productName: "Logitech MX Master 3", quantity: 3, unitPrice: 27500, costPrice: 18000 },
     ],
     totalAmount: 624600,
+    deliveryCharges: 0,
     totalCost: 430000,
     totalProfit: 194700,
     profitPercentage: 31.2,
@@ -332,6 +334,7 @@ const mockInvoices: Invoice[] = [
       },
     ],
     totalAmount: 555500,
+    deliveryCharges: 0,
     totalCost: 390000,
     totalProfit: 165500,
     profitPercentage: 29.8,
@@ -350,6 +353,7 @@ const mockInvoices: Invoice[] = [
       { productId: "prod-2", productName: "Logitech MX Master 3", quantity: 1, unitPrice: 27500, costPrice: 18000 },
     ],
     totalAmount: 722500,
+    deliveryCharges: 0,
     totalCost: 547000,
     totalProfit: 175500,
     profitPercentage: 24.3,
@@ -1004,6 +1008,7 @@ function DashboardPageContent() {
       customer_phone: newInvoice.customerPhone,
       created_at: newInvoice.createdAt,
       total_amount: newInvoice.totalAmount,
+      delivery_charges: newInvoice.deliveryCharges,
       total_cost: newInvoice.totalCost,
       total_profit: newInvoice.totalProfit,
       profit_percentage: newInvoice.profitPercentage,
@@ -1082,6 +1087,7 @@ function DashboardPageContent() {
             customer_phone: invoice.customerPhone,
             created_at: invoice.createdAt,
             total_amount: invoice.totalAmount,
+            delivery_charges: invoice.deliveryCharges ?? 0,
             total_cost: invoice.totalCost,
             total_profit: invoice.totalProfit,
             profit_percentage: invoice.profitPercentage,
@@ -1209,13 +1215,33 @@ function DashboardPageContent() {
       })
 
       yPosition += 10
+      if (yPosition > 230) {
+        doc.addPage()
+        yPosition = 30
+      }
       doc.setDrawColor(0, 0, 0)
       doc.line(100, yPosition - 5, 190, yPosition - 5)
 
       doc.setFont("Times", "Bold")
       doc.setFontSize(14)
-      doc.text("Total Amount:", 100, yPosition)
+      doc.text("Products Subtotal:", 100, yPosition)
       doc.text(formatCurrency(invoice.totalAmount, invoice.currency || currentAppCurrency), 170, yPosition)
+      yPosition += 8
+      doc.setFont("Times", "Roman")
+      doc.text("Delivery Charges:", 100, yPosition)
+      doc.text(
+        formatCurrency(invoice.deliveryCharges || 0, invoice.currency || currentAppCurrency),
+        170,
+        yPosition,
+      )
+      yPosition += 8
+      doc.setFont("Times", "Bold")
+      doc.text("Customer Total:", 100, yPosition)
+      doc.text(
+        formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), invoice.currency || currentAppCurrency),
+        170,
+        yPosition,
+      )
 
       const contactSectionY = doc.internal.pageSize.height - 50
       doc.setFont("Times", "Roman")

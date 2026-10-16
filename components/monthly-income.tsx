@@ -1796,8 +1796,13 @@ export function MonthlyIncome({
                           <div className="flex items-center space-x-4">
                             <div className="text-right">
                               <p className="font-bold text-gray-900">
-                                {formatCurrency(invoice.totalAmount, currentAppCurrency)}
+                                {formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currentAppCurrency)}
                               </p>
+                              {invoice.deliveryCharges > 0 && (
+                                <p className="text-xs text-gray-500">
+                                  Delivery: {formatCurrency(invoice.deliveryCharges, currentAppCurrency)}
+                                </p>
+                              )}
                               <p
                                 className={`text-sm font-medium ${invoice.totalProfit >= 0 ? "text-green-600" : "text-red-600"}`}
                               >

@@ -46,6 +46,7 @@ export function InvoiceCreateDialog({
   const [customerPhone, setCustomerPhone] = useState("")
   const [trackingId, setTrackingId] = useState("")
   const [items, setItems] = useState<InvoiceItem[]>([])
+  const [deliveryCharges, setDeliveryCharges] = useState("0")
   const [productSearchTerm, setProductSearchTerm] = useState("")
   const [customerSearchTerm, setCustomerSearchTerm] = useState("")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
@@ -219,6 +220,7 @@ export function InvoiceCreateDialog({
       customerPhone: customerPhone.trim(),
       items,
       totalAmount,
+      deliveryCharges: Number(deliveryCharges) || 0,
       totalCost,
       totalProfit,
       profitPercentage,
@@ -237,6 +239,7 @@ export function InvoiceCreateDialog({
     setCustomerPhone("")
     setTrackingId("")
     setItems([])
+    setDeliveryCharges("0")
     setProductSearchTerm("")
     setCustomerSearchTerm("")
     setSelectedCustomer(null)
@@ -426,7 +429,7 @@ export function InvoiceCreateDialog({
                             )}
                           </div>
                           <Badge variant="outline" className="border-purple-300 text-purple-600">
-                            {formatCurrency(invoice.totalAmount, currentAppCurrency)}
+                            {formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currentAppCurrency)}
                           </Badge>
                         </div>
                       </div>
@@ -631,39 +634,64 @@ export function InvoiceCreateDialog({
 
           {/* Invoice Summary */}
           {items.length > 0 && (
-            <Card className="border-2 border-yellow-200 shadow-md bg-gradient-to-br from-yellow-50 to-orange-50">
-              <CardHeader className="bg-gradient-to-r from-yellow-100 to-orange-100 border-b-2 border-yellow-200">
-                <CardTitle className="text-yellow-800">Invoice Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center p-3 bg-white rounded-lg border-2 border-yellow-200">
-                    <span className="font-semibold text-gray-700">Total Cost:</span>
-                    <span className="text-lg font-bold text-red-600">
-                      {formatCurrency(totalCost, currentAppCurrency)}
-                    </span>
+            <>
+              <div className="max-w-sm space-y-2">
+                <Label htmlFor="deliveryCharges">Delivery Charges (separate from profit)</Label>
+                <Input
+                  id="deliveryCharges"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={deliveryCharges}
+                  onChange={(event) => setDeliveryCharges(event.target.value)}
+                />
+              </div>
+              <Card className="border-2 border-yellow-200 shadow-md bg-gradient-to-br from-yellow-50 to-orange-50">
+                <CardHeader className="bg-gradient-to-r from-yellow-100 to-orange-100 border-b-2 border-yellow-200">
+                  <CardTitle className="text-yellow-800">Invoice Summary</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center p-3 bg-white rounded-lg border-2 border-yellow-200">
+                      <span className="font-semibold text-gray-700">Total Cost:</span>
+                      <span className="text-lg font-bold text-red-600">
+                        {formatCurrency(totalCost, currentAppCurrency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-white rounded-lg border-2 border-yellow-200">
+                      <span className="font-semibold text-gray-700">Products Subtotal:</span>
+                      <span className="text-lg font-bold text-gray-900">
+                        {formatCurrency(totalAmount, currentAppCurrency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-white rounded-lg border-2 border-yellow-200">
+                      <span className="font-semibold text-gray-700">Delivery Charges:</span>
+                      <span className="text-lg font-bold text-gray-900">
+                        {formatCurrency(Number(deliveryCharges) || 0, currentAppCurrency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-white rounded-lg border-2 border-yellow-200">
+                      <span className="font-semibold text-gray-700">Customer Total:</span>
+                      <span className="text-lg font-bold text-gray-900">
+                        {formatCurrency(totalAmount + (Number(deliveryCharges) || 0), currentAppCurrency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-white rounded-lg border-2 border-yellow-200">
+                      <span className="font-semibold text-gray-700">Total Profit:</span>
+                      <span className={`text-lg font-bold ${totalProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {formatCurrency(totalProfit, currentAppCurrency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-white rounded-lg border-2 border-yellow-200">
+                      <span className="font-semibold text-gray-700">Profit Margin:</span>
+                      <span className={`text-lg font-bold ${profitPercentage >= 0 ? "text-green-600" : "text-red-600"}`}>
+                        {profitPercentage.toFixed(2)}%
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center p-3 bg-white rounded-lg border-2 border-yellow-200">
-                    <span className="font-semibold text-gray-700">Total Amount:</span>
-                    <span className="text-lg font-bold text-gray-900">
-                      {formatCurrency(totalAmount, currentAppCurrency)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 bg-white rounded-lg border-2 border-yellow-200">
-                    <span className="font-semibold text-gray-700">Total Profit:</span>
-                    <span className={`text-lg font-bold ${totalProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                      {formatCurrency(totalProfit, currentAppCurrency)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 bg-white rounded-lg border-2 border-yellow-200">
-                    <span className="font-semibold text-gray-700">Profit Margin:</span>
-                    <span className={`text-lg font-bold ${profitPercentage >= 0 ? "text-green-600" : "text-red-600"}`}>
-                      {profitPercentage.toFixed(2)}%
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </>
           )}
 
           {/* Action Buttons */}

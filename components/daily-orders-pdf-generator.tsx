@@ -142,7 +142,7 @@ export async function generateDailyOrdersPDF(invoices: Invoice[], selectedDate: 
 
       doc.text(invoice.id, 15, currentY)
       doc.text(invoice.customerName.substring(0, 20), 42, currentY)
-      doc.text(formatCurrency(invoice.totalAmount, currency), 79, currentY)
+      doc.text(formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currency), 79, currentY)
       doc.text(formatCurrency(invoice.totalProfit, currency), 103, currentY)
 
       const statusColor: [number, number, number] =

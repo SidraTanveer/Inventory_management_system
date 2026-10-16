@@ -22,6 +22,7 @@ const NUMERIC_KEYS = new Set([
   "unitCost",
   "totalCost",
   "totalAmount",
+  "deliveryCharges",
   "totalProfit",
   "profitPercentage",
   "discountPercentage",

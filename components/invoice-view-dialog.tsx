@@ -75,8 +75,9 @@ export function InvoiceViewDialog({
                   {getStatusBadge(invoice.status)}
                   <div className="mt-2">
                     <div className="text-2xl font-bold text-gray-900">
-                      {formatCurrency(invoice.totalAmount, currentAppCurrency)}
+                      {formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currentAppCurrency)}
                     </div>
+                    <div className="text-xs text-gray-500">Including delivery charges</div>
                     <div
                       className={`text-sm font-medium ${invoice.totalProfit >= 0 ? "text-green-600" : "text-red-600"}`}
                     >
@@ -190,7 +191,7 @@ export function InvoiceViewDialog({
                     </div>
                   </div>
                   <div className="bg-blue-50 p-4 rounded-lg">
-                    <div className="text-sm font-medium text-blue-800 mb-1">Total Amount</div>
+                    <div className="text-sm font-medium text-blue-800 mb-1">Products Subtotal</div>
                     <div className="text-xl font-bold text-blue-600">
                       {formatCurrency(invoice.totalAmount, currentAppCurrency)}
                     </div>
@@ -215,12 +216,19 @@ export function InvoiceViewDialog({
                 <Separator />
 
                 <div className="flex justify-between items-center">
+                  <span className="text-lg font-medium text-gray-900">Delivery Charges</span>
+                  <span className="text-lg font-bold text-gray-900">
+                    {formatCurrency(invoice.deliveryCharges || 0, currentAppCurrency)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
                   <div className="flex items-center">
                     <TrendingUp className="h-5 w-5 text-gray-600 mr-2" />
-                    <span className="text-lg font-medium text-gray-900">Final Amount</span>
+                    <span className="text-lg font-medium text-gray-900">Customer Total</span>
                   </div>
                   <div className="text-2xl font-bold text-gray-900">
-                    {formatCurrency(invoice.totalAmount, currentAppCurrency)}
+                    {formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currentAppCurrency)}
                   </div>
                 </div>
               </div>

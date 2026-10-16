@@ -403,7 +403,12 @@ export function DailyOrders({
                         </div>
                       </TableCell>
                       <TableCell className="font-semibold text-gray-900">
-                        {formatCurrency(invoice.totalAmount, currentAppCurrency)}
+                        {formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currentAppCurrency)}
+                        {invoice.deliveryCharges > 0 && (
+                          <div className="text-xs font-normal text-gray-500">
+                            Delivery: {formatCurrency(invoice.deliveryCharges, currentAppCurrency)}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell
                         className={

@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   customer_email TEXT NOT NULL,
   customer_phone TEXT,
   total_amount NUMERIC(18,4) NOT NULL DEFAULT 0,
+  delivery_charges NUMERIC(18,4) NOT NULL DEFAULT 0,
   total_cost NUMERIC(18,4) NOT NULL DEFAULT 0,
   total_profit NUMERIC(18,4) NOT NULL DEFAULT 0,
   profit_percentage NUMERIC(5,2) NOT NULL DEFAULT 0,
@@ -113,6 +114,9 @@ CREATE TABLE IF NOT EXISTS invoices (
   currency TEXT NOT NULL DEFAULT 'USD',
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'cancelled'))
 );
+
+ALTER TABLE invoices
+  ADD COLUMN IF NOT EXISTS delivery_charges NUMERIC(18,4) NOT NULL DEFAULT 0;
 
 -- Sales history for products (derived from invoices)
 CREATE TABLE IF NOT EXISTS sales_history_items (

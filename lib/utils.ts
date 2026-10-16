@@ -342,6 +342,8 @@ export async function exportToExcel(data: {
         "Customer Email": invoice.customerEmail,
         "Customer Phone": invoice.customerPhone,
         "Total Amount": invoice.totalAmount,
+        "Delivery Charges": invoice.deliveryCharges || 0,
+        "Customer Total": invoice.totalAmount + (invoice.deliveryCharges || 0),
         "Total Cost": invoice.totalCost,
         "Total Profit": invoice.totalProfit,
         "Profit Percentage": invoice.profitPercentage,

@@ -102,8 +102,8 @@ export function InvoiceManagement({
         (!dateRange.from || invoiceDate >= dateRange.from) && (!dateRange.to || invoiceDate <= dateRange.to)
 
       const matchesAmountRange =
-        (!amountRange.min || invoice.totalAmount >= Number(amountRange.min)) &&
-        (!amountRange.max || invoice.totalAmount <= Number(amountRange.max))
+        (!amountRange.min || invoice.totalAmount + (invoice.deliveryCharges || 0) >= Number(amountRange.min)) &&
+        (!amountRange.max || invoice.totalAmount + (invoice.deliveryCharges || 0) <= Number(amountRange.max))
 
       const matchesProfitRange =
         (!profitRange.min || invoice.totalProfit >= Number(profitRange.min)) &&
@@ -613,8 +613,13 @@ export function InvoiceManagement({
                       <td className="p-4 text-gray-600">{formatDate(invoice.createdAt)}</td>
                       <td className="p-4">
                         <div className="font-medium text-gray-900">
-                          {formatCurrency(invoice.totalAmount, currentAppCurrency)}
+                          {formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currentAppCurrency)}
                         </div>
+                        {invoice.deliveryCharges > 0 && (
+                          <div className="text-xs text-gray-500">
+                            Delivery: {formatCurrency(invoice.deliveryCharges, currentAppCurrency)}
+                          </div>
+                        )}
                       </td>
                       <td className="p-4">
                         <div className={`font-medium ${invoice.totalProfit >= 0 ? "text-green-600" : "text-red-600"}`}>

@@ -112,7 +112,7 @@ export async function generateCustomersPDF(customers: Customer[], invoices: Invo
 
         const totalQty = invoice.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
         doc.text(totalQty.toString(), 160, currentY)
-        doc.text(formatCurrency(invoice.totalAmount, currency), 190, currentY)
+        doc.text(formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currency), 190, currentY)
         doc.text((invoice.status ?? "pending").toString(), 230, currentY)
         currentY += 5
       })
@@ -374,7 +374,13 @@ export async function generateInvoicesSummaryPDF(invoices: Invoice[], currency: 
     // Invoice totals
     doc.setFont("Times", "Bold")
     doc.setFontSize(9)
-    doc.text(`Total Amount: ${formatCurrency(invoice.totalAmount, currency)}`, 15, currentY + 3)
+    doc.text(`Products Subtotal: ${formatCurrency(invoice.totalAmount, currency)}`, 15, currentY + 3)
+    doc.text(`Delivery Charges: ${formatCurrency(invoice.deliveryCharges || 0, currency)}`, 15, currentY + 8)
+    doc.text(
+      `Customer Total: ${formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currency)}`,
+      15,
+      currentY + 13,
+    )
     doc.text(`Total Profit: ${formatCurrency(invoice.totalProfit, currency)}`, 100, currentY + 3)
     doc.text(`Profit %: ${invoice.profitPercentage.toFixed(1)}%`, 180, currentY + 3)
     currentY += 12

@@ -1,5 +1,6 @@
 import { query, transaction } from "@/lib/db"
 import { mapDatabaseRows, mapDatabaseRow } from "@/lib/db-mapper"
+import { ensureInvoiceDeliveryChargesSchema } from "@/lib/invoices"
 
 export async function getTrashItems() {
   const res = await query(`SELECT id, original_id, type, data, deleted_at FROM trash_items ORDER BY deleted_at DESC`)
@@ -31,6 +32,7 @@ export async function createTrashItem(payload: any) {
 }
 
 export async function restoreTrashItem(id: string) {
+  await ensureInvoiceDeliveryChargesSchema()
   return transaction(async (client) => {
   const res = await client.query(`SELECT id, original_id, type, data FROM trash_items WHERE id = $1`, [id])
   const item = res.rows[0]
@@ -128,10 +130,10 @@ export async function restoreTrashItem(id: string) {
     restored = result.rows[0] ? mapDatabaseRow(result.rows[0]) : data
   } else if (item.type === "invoice") {
     const result = await client.query(
-      `INSERT INTO invoices (id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost, total_profit, profit_percentage, created_at, currency, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      `INSERT INTO invoices (id, tracking_id, customer_name, customer_email, customer_phone, total_amount, delivery_charges, total_cost, total_profit, profit_percentage, created_at, currency, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        ON CONFLICT (id) DO NOTHING
-       RETURNING id, tracking_id, customer_name, customer_email, customer_phone, total_amount, total_cost, total_profit, profit_percentage, created_at, currency, status`,
+       RETURNING id, tracking_id, customer_name, customer_email, customer_phone, total_amount, delivery_charges, total_cost, total_profit, profit_percentage, created_at, currency, status`,
       [
         data.id,
         data.trackingId ?? data.tracking_id ?? null,
@@ -139,6 +141,7 @@ export async function restoreTrashItem(id: string) {
         data.customerEmail ?? data.customer_email,
         data.customerPhone ?? data.customer_phone,
         data.totalAmount ?? data.total_amount,
+        data.deliveryCharges ?? data.delivery_charges ?? 0,
         data.totalCost ?? data.total_cost,
         data.totalProfit ?? data.total_profit,
         data.profitPercentage ?? data.profit_percentage,

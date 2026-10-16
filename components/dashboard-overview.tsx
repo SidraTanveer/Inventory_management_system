@@ -746,7 +746,7 @@ export function DashboardOverview({
                         </div>
                       </TableCell>
                       <TableCell className="font-semibold">
-                        {formatCurrency(invoice.totalAmount, currentAppCurrency)}
+                        {formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currentAppCurrency)}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center">

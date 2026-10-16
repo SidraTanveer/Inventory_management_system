@@ -143,6 +143,7 @@ export function PDFUploadParser({
           customerEmail: parts[2],
           customerPhone: parts[3],
           totalAmount: totalAmount,
+          deliveryCharges: 0,
           totalProfit: totalProfit,
           totalCost: totalAmount - totalProfit || 0,
           profitPercentage: 0,

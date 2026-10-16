@@ -322,7 +322,7 @@ export function GlobalSearch({
                             <div className="flex items-center justify-between">
                               <span>{formatDate(invoice.createdAt)}</span>
                               <span className="font-medium text-gray-900">
-                                {formatCurrency(invoice.totalAmount, currentAppCurrency)}
+                                {formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currentAppCurrency)}
                               </span>
                             </div>
                           </div>

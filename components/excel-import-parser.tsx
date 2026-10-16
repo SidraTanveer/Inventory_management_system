@@ -148,6 +148,7 @@ export function ExcelImportParser({
       customerEmail: row["Customer Email"],
       customerPhone: row["Customer Phone"],
       totalAmount: Number.parseFloat(row["Total Amount"]) || 0,
+      deliveryCharges: Number.parseFloat(row["Delivery Charges"]) || 0,
       totalProfit: Number.parseFloat(row["Total Profit"]) || 0,
       status: row["Status"] || "pending",
     }))
