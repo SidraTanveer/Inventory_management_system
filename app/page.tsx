@@ -869,6 +869,10 @@ function DashboardPageContent() {
   }
 
   const handleAddProduct = async (newProduct: Product) => {
+    const savingToast = toast({
+      title: "Saving Product",
+      description: `${newProduct.name} is being saved to the database.`,
+    })
     try {
       const result = await requestApi<{ product: Product }>("/api/products", {
         method: "POST",
@@ -888,17 +892,23 @@ function DashboardPageContent() {
       if (!result.product) throw new Error("The product was not returned by the database.")
       setProducts((prev) => mergeProductsById([normalizeProduct(result.product)], prev))
     } catch (error) {
+      savingToast.dismiss()
       reportPersistenceError("add this product", error)
       return false
     }
+    savingToast.dismiss()
     toast({
-      title: "Product Added",
-      description: `${newProduct.name} has been added to inventory.`,
+      title: "Product Saved",
+      description: `${newProduct.name} was saved to the database and added to inventory.`,
     })
     return true
   }
 
   const handleUpdateProduct = async (updatedProduct: Product): Promise<Product | null> => {
+    const savingToast = toast({
+      title: "Saving Product Changes",
+      description: `${updatedProduct.name} is being updated in the database.`,
+    })
     try {
       const result = await requestApi<{ product: Product }>("/api/products", {
         method: "PUT",
@@ -921,12 +931,14 @@ function DashboardPageContent() {
       setProducts((prev) =>
         mergeProductsById([savedProduct], prev.filter((product) => product.id !== savedProduct.id)),
       )
+      savingToast.dismiss()
       toast({
-        title: "Product Updated",
-        description: `${savedProduct.name} has been saved to the database.`,
+        title: "Product Changes Saved",
+        description: `${savedProduct.name} was successfully updated in the database.`,
       })
       return savedProduct
     } catch (error) {
+      savingToast.dismiss()
       reportPersistenceError("update this product", error)
     }
     return null
@@ -935,14 +947,20 @@ function DashboardPageContent() {
   const handleDeleteProduct = async (productId: string, productName: string) => {
     const productToDelete = products.find((p) => p.id === productId)
     if (!productToDelete) return
+    const deletingToast = toast({
+      title: "Deleting Product",
+      description: `${productName} is being moved to the Recycle Bin.`,
+    })
     try {
       const result = await requestApi<{ deleted: { id: string } | null }>(
         `/api/products?id=${encodeURIComponent(productId)}`,
         { method: "DELETE" },
       )
       if (!result.deleted) throw new Error("Product was not found in the database.")
+      deletingToast.dismiss()
       await handleMoveToTrash(productToDelete, "product")
     } catch (error) {
+      deletingToast.dismiss()
       reportPersistenceError(`delete ${productName}`, error)
     }
   }
