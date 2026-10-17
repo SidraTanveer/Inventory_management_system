@@ -332,8 +332,9 @@ export async function generateInvoicesSummaryPDF(invoices: Invoice[], currency: 
     doc.setFontSize(9)
     doc.setTextColor(0, 0, 0)
     doc.text(`Customer: ${invoice.customerName}`, 15, currentY)
-    doc.text(`Email: ${invoice.customerEmail}`, 100, currentY)
-    doc.text(`Phone: ${invoice.customerPhone}`, 180, currentY)
+    if (invoice.customerPhone) {
+      doc.text(`Phone: ${invoice.customerPhone}`, 100, currentY)
+    }
     currentY += 7
 
     // Products table header

@@ -176,7 +176,9 @@ export function MonthlyIncome({
     const totalOrders = monthlyInvoices.length
     const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
 
-    const uniqueCustomers = new Set(monthlyInvoices.map((invoice) => invoice.customerEmail)).size
+    const uniqueCustomers = new Set(
+      monthlyInvoices.map((invoice) => invoice.customerEmail || invoice.customerPhone || invoice.customerName),
+    ).size
 
     const totalItems = monthlyInvoices.reduce(
       (sum, invoice) => sum + invoice.items.reduce((itemSum, item) => itemSum + (Number(item.quantity) || 0), 0),
@@ -190,13 +192,12 @@ export function MonthlyIncome({
     const cancelledOrders = monthlyInvoices.filter((inv) => (inv.status ?? "pending") === "cancelled").length
 
     // Top customers by revenue
-    const customerRevenue: { [key: string]: { name: string; email: string; revenue: number; orders: number } } = {}
+    const customerRevenue: { [key: string]: { name: string; revenue: number; orders: number } } = {}
     monthlyInvoices.forEach((invoice) => {
-      const key = invoice.customerEmail || invoice.customerName
+      const key = invoice.customerEmail || invoice.customerPhone || invoice.customerName
       if (!customerRevenue[key]) {
         customerRevenue[key] = {
           name: invoice.customerName,
-          email: invoice.customerEmail,
           revenue: 0,
           orders: 0,
         }
@@ -355,7 +356,6 @@ export function MonthlyIncome({
     trackingId: string
     date: string
     customerName: string
-    customerEmail: string
     customerPhone: string
     status: string
     items: Array<{
@@ -411,7 +411,6 @@ export function MonthlyIncome({
           year: "numeric",
         }),
         customerName: inv.customerName,
-        customerEmail: inv.customerEmail,
         customerPhone: inv.customerPhone,
         status: (inv.status ?? "pending").charAt(0).toUpperCase() + (inv.status ?? "pending").slice(1),
         items: items,
@@ -648,7 +647,7 @@ export function MonthlyIncome({
           // Calculate required lines for customer name (only on first item)
           if (itemIndex === 0) {
             const customerLines = pdf.splitTextToSize(invoiceRow.customerName, colWidths.customer - 4)
-            maxLines = Math.max(maxLines, customerLines.length + 1) // +1 for email line
+            maxLines = Math.max(maxLines, customerLines.length)
           }
 
           const rowHeight = baseRowHeight + (maxLines - 1) * 3
@@ -692,21 +691,12 @@ export function MonthlyIncome({
             pdf.text(invoiceRow.status, xPos + colWidths.status / 2, yPos + 5, { align: "center" })
             xPos += colWidths.status
 
-            // Customer (name and email centered)
+            // Customer name
             pdf.setFont("helvetica", "bold")
             pdf.setTextColor(0, 0, 0)
             pdf.setFontSize(8)
             const customerNameLines = pdf.splitTextToSize(invoiceRow.customerName, colWidths.customer - 4)
-            pdf.text(customerNameLines[0], xPos + colWidths.customer / 2, yPos + 3, {
-              align: "center",
-              maxWidth: colWidths.customer - 4,
-            })
-
-            pdf.setFont("helvetica", "normal")
-            pdf.setFontSize(6)
-            pdf.setTextColor(100, 100, 100)
-            const emailLines = pdf.splitTextToSize(invoiceRow.customerEmail, colWidths.customer - 4)
-            pdf.text(emailLines[0], xPos + colWidths.customer / 2, yPos + 6.5, {
+            pdf.text(customerNameLines[0], xPos + colWidths.customer / 2, yPos + 5, {
               align: "center",
               maxWidth: colWidths.customer - 4,
             })
@@ -1537,7 +1527,7 @@ export function MonthlyIncome({
                   <div className="space-y-4">
                     {monthlyMetrics.topCustomers.map((customer, index) => (
                       <div
-                        key={customer.email || customer.name}
+                        key={customer.name}
                         className="p-4 rounded-lg border hover:shadow-md transition-shadow hover:bg-blue-50/50"
                       >
                         <div className="flex items-center justify-between">
@@ -1547,7 +1537,6 @@ export function MonthlyIncome({
                             </div>
                             <div>
                               <p className="font-medium text-gray-900">{customer.name}</p>
-                              <p className="text-sm text-gray-500">{customer.email}</p>
                               <p className="text-xs text-gray-400">{customer.orders} orders</p>
                             </div>
                           </div>

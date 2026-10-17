@@ -43,7 +43,6 @@ export function InvoiceCreateDialog({
 }: InvoiceCreateDialogProps) {
   const { toast } = useToast()
   const [customerName, setCustomerName] = useState("")
-  const [customerEmail, setCustomerEmail] = useState("")
   const [customerPhone, setCustomerPhone] = useState("")
   const [trackingId, setTrackingId] = useState("")
   const [items, setItems] = useState<InvoiceItem[]>([])
@@ -68,14 +67,13 @@ export function InvoiceCreateDialog({
 
   const filteredCustomers = searchAndRank(searchableCustomers, customerSearchTerm, [
     (customer) => customer.name,
-    (customer) => customer.email,
     (customer) => customer.phone,
   ])
 
   const filteredInvoices = searchAndRank(existingInvoices, invoiceSearchTerm, [
     (invoice) => invoice.id,
     (invoice) => invoice.customerName,
-    (invoice) => invoice.customerEmail,
+    (invoice) => invoice.customerPhone,
     (invoice) => invoice.trackingId,
   ])
 
@@ -131,7 +129,6 @@ export function InvoiceCreateDialog({
   const selectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer)
     setCustomerName(customer.name)
-    setCustomerEmail(customer.email)
     setCustomerPhone(customer.phone)
     setShowCustomerSearch(false)
     setCustomerSearchTerm("")
@@ -140,18 +137,18 @@ export function InvoiceCreateDialog({
   const clearCustomer = () => {
     setSelectedCustomer(null)
     setCustomerName("")
-    setCustomerEmail("")
     setCustomerPhone("")
   }
 
   const selectInvoice = (invoice: Invoice) => {
     setCustomerName(invoice.customerName)
-    setCustomerEmail(invoice.customerEmail)
     setCustomerPhone(invoice.customerPhone)
     setShowInvoiceSearch(false)
     setInvoiceSearchTerm("")
 
-    const existingCustomer = searchableCustomers.find((c) => c.email === invoice.customerEmail)
+    const existingCustomer = searchableCustomers.find(
+      (customer) => customer.name === invoice.customerName && customer.phone === invoice.customerPhone,
+    )
     if (existingCustomer) {
       setSelectedCustomer(existingCustomer)
     }
@@ -172,10 +169,10 @@ export function InvoiceCreateDialog({
   const profitPercentage = totalAmount > 0 ? (totalProfit / totalAmount) * 100 : 0
 
   const handleSave = () => {
-    if (!customerName.trim() || !customerEmail.trim() || items.length === 0) {
+    if (!customerName.trim() || items.length === 0) {
       toast({
         title: "Validation Error",
-        description: "Please fill in customer details and add at least one item.",
+        description: "Please enter the customer name and add at least one item.",
         variant: "destructive",
       })
       return
@@ -194,7 +191,7 @@ export function InvoiceCreateDialog({
       id: "",
       trackingId: trackingId.trim() || undefined,
       customerName: customerName.trim(),
-      customerEmail: customerEmail.trim(),
+      customerEmail: "",
       customerPhone: customerPhone.trim(),
       items,
       totalAmount,
@@ -213,7 +210,6 @@ export function InvoiceCreateDialog({
 
   const handleClose = () => {
     setCustomerName("")
-    setCustomerEmail("")
     setCustomerPhone("")
     setTrackingId("")
     setItems([])
@@ -378,8 +374,7 @@ export function InvoiceCreateDialog({
                         onClick={() => selectCustomer(customer)}
                       >
                         <div className="font-medium text-gray-900">{customer.name}</div>
-                        <div className="text-sm text-gray-600">{customer.email}</div>
-                        <div className="text-sm text-gray-500">{customer.phone}</div>
+                        {customer.phone && <div className="text-sm text-gray-500">Phone: {customer.phone}</div>}
                       </div>
                     ))}
                     {filteredCustomers.length === 0 && customerSearchTerm && (
@@ -392,7 +387,7 @@ export function InvoiceCreateDialog({
               {showInvoiceSearch && (
                 <div className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
                   <Input
-                    placeholder="Search invoices by ID, customer name, or email..."
+                    placeholder="Search invoices by ID, customer name, or phone..."
                     value={invoiceSearchTerm}
                     onChange={(e) => {
                       setInvoiceSearchTerm(e.target.value)
@@ -429,8 +424,10 @@ export function InvoiceCreateDialog({
                         <div className="flex justify-between items-start">
                           <div>
                             <div className="font-medium text-gray-900">{invoice.customerName}</div>
-                            <div className="text-sm text-gray-600">{invoice.customerEmail}</div>
                             <div className="text-sm text-gray-500">Invoice: {invoice.id}</div>
+                            {invoice.customerPhone && (
+                              <div className="text-sm text-gray-500">Phone: {invoice.customerPhone}</div>
+                            )}
                             {invoice.trackingId && (
                               <div className="text-sm text-purple-600 flex items-center">
                                 <Hash className="h-3 w-3 mr-1" />
@@ -451,7 +448,7 @@ export function InvoiceCreateDialog({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="customerName" className="text-gray-700 font-semibold">
                     Customer Name *
@@ -465,21 +462,8 @@ export function InvoiceCreateDialog({
                   />
                 </div>
                 <div>
-                  <Label htmlFor="customerEmail" className="text-gray-700 font-semibold">
-                    Email *
-                  </Label>
-                  <Input
-                    id="customerEmail"
-                    type="email"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                    placeholder="Enter email address"
-                    className="border-2 border-purple-200 focus:border-purple-500 focus:ring-purple-500 mt-1"
-                  />
-                </div>
-                <div>
                   <Label htmlFor="customerPhone" className="text-gray-700 font-semibold">
-                    Phone
+                    Phone (Optional)
                   </Label>
                   <Input
                     id="customerPhone"

@@ -29,6 +29,7 @@ import {
   Phone,
   Eye,
   Edit,
+  Truck,
 } from "lucide-react"
 import type { Product, Invoice, Deal, TrashItem, Customer } from "@/types/app"
 import type { User as AuthUser } from "@/types/auth"
@@ -97,6 +98,12 @@ export function GlobalSearch({
     { id: "invoices", name: "Invoices", icon: FileText, description: "Create and manage invoices" },
     { id: "reports", name: "Reports", icon: BarChart, description: "Monthly income and analytics" },
     {
+      id: "delivery-charges",
+      name: "Delivery Charges",
+      icon: Truck,
+      description: "Daily, monthly, and yearly customer delivery charges",
+    },
+    {
       id: "customer-profit",
       name: "Customer Profit",
       icon: DollarSign,
@@ -139,7 +146,7 @@ export function GlobalSearch({
       invoices: searchAndRank(activeInvoices, term, [
         (invoice) => invoice.id,
         (invoice) => invoice.customerName,
-        (invoice) => invoice.customerEmail,
+        (invoice) => invoice.customerPhone,
         (invoice) => invoice.trackingId,
       ]),
       users: searchAndRank(users, term, [(user) => user.name, (user) => user.email, (user) => user.role]),
@@ -315,10 +322,12 @@ export function GlobalSearch({
                               <User className="h-3 w-3 mr-1" />
                               {invoice.customerName}
                             </div>
-                            <div className="flex items-center">
-                              <Mail className="h-3 w-3 mr-1" />
-                              {invoice.customerEmail}
-                            </div>
+                            {invoice.customerPhone && (
+                              <div className="flex items-center">
+                                <Phone className="h-3 w-3 mr-1" />
+                                {invoice.customerPhone}
+                              </div>
+                            )}
                             <div className="flex items-center justify-between">
                               <span>{formatDate(invoice.createdAt)}</span>
                               <span className="font-medium text-gray-900">

@@ -18,11 +18,13 @@ import {
   UserRound,
   Calendar,
   Search,
+  Truck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { UserManagement } from "@/components/user-management"
 import { GuestManagement } from "@/components/guest-management"
 import { MonthlyIncome } from "@/components/monthly-income"
+import { DeliveryChargesDashboard } from "@/components/delivery-charges-dashboard"
 import { VendorManagement } from "@/components/vendor-management"
 import { Settings as AppSettings } from "@/components/settings"
 import { DashboardOverview } from "@/components/dashboard-overview"
@@ -458,6 +460,7 @@ type ActiveTab =
   | "products"
   | "invoices"
   | "reports"
+  | "delivery-charges"
   | "users"
   | "guests"
   | "vendors"
@@ -1181,8 +1184,9 @@ function DashboardPageContent() {
       doc.setFontSize(15)
       doc.text("Bill To:", 120, currentY + 35)
       doc.text(`Name: ${invoice.customerName}`, 120, currentY + 45)
-      doc.text(`Email: ${invoice.customerEmail}`, 120, currentY + 52)
-      doc.text(`Phone: ${invoice.customerPhone}`, 120, currentY + 59)
+      if (invoice.customerPhone) {
+        doc.text(`Phone: ${invoice.customerPhone}`, 120, currentY + 52)
+      }
 
       let yPosition = invoice.trackingId ? currentY + 74 : currentY + 67
       doc.setFillColor(240, 240, 240)
@@ -1280,7 +1284,6 @@ function DashboardPageContent() {
         type: "invoice",
         entity_id: invoice.id,
         entity_type: "invoice",
-        created_by: invoice.customerEmail,
       })
 
       toast({
@@ -1849,6 +1852,16 @@ function DashboardPageContent() {
           >
             <BarChart className="mr-2 h-4 w-4" /> Reports
           </Button>
+          <Button
+            variant={activeTab === "delivery-charges" ? "secondary" : "ghost"}
+            className={cn(
+              "w-full justify-start",
+              activeTab === "delivery-charges" && "bg-purple-600 text-white hover:bg-purple-700",
+            )}
+            onClick={() => setActiveTab("delivery-charges")}
+          >
+            <Truck className="mr-2 h-4 w-4" /> Delivery Charges
+          </Button>
           {user?.role === "admin" && (
             <>
               <Button
@@ -1977,6 +1990,9 @@ function DashboardPageContent() {
             onCreateInvoice={() => setIsCreateInvoiceOpen(true)}
             currentAppCurrency={currentAppCurrency}
           />
+        )}
+        {activeTab === "delivery-charges" && (
+          <DeliveryChargesDashboard invoices={invoices} currentAppCurrency={currentAppCurrency} />
         )}
         {activeTab === "daily-orders" && (
           <DailyOrders

@@ -91,7 +91,7 @@ export function InvoiceManagement({
     return invoices.filter((invoice) => {
       const matchesSearch =
         !normalizedSearchTerm ||
-        [invoice.id, invoice.customerName, invoice.customerEmail, invoice.trackingId].some((value) =>
+        [invoice.id, invoice.customerName, invoice.customerPhone, invoice.trackingId].some((value) =>
           normalizeSearchText(value).includes(normalizedSearchTerm),
         )
 
@@ -121,7 +121,7 @@ export function InvoiceManagement({
         (invoice) => invoice.id,
         (invoice) => invoice.trackingId,
         (invoice) => invoice.customerName,
-        (invoice) => invoice.customerEmail,
+        (invoice) => invoice.customerPhone,
       ],
       12,
     )
@@ -399,7 +399,7 @@ export function InvoiceManagement({
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder="Search by Invoice ID, tracking ID, customer name, or email..."
+                  placeholder="Search by Invoice ID, tracking ID, customer name, or phone..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   list="invoice-search-suggestions"
@@ -604,7 +604,6 @@ export function InvoiceManagement({
                       <td className="p-4">
                         <div>
                           <div className="font-medium text-gray-900">{invoice.customerName}</div>
-                          <div className="text-sm text-gray-600">{invoice.customerEmail}</div>
                           {invoice.customerPhone && (
                             <div className="text-sm text-gray-600">{invoice.customerPhone}</div>
                           )}

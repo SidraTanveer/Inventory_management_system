@@ -71,7 +71,6 @@ export function InvoiceEditDialog({
 }: InvoiceEditDialogProps) {
   const { toast } = useToast()
   const [customerName, setCustomerName] = useState(invoice.customerName)
-  const [customerEmail, setCustomerEmail] = useState(invoice.customerEmail)
   const [customerPhone, setCustomerPhone] = useState(invoice.customerPhone)
   const [trackingId, setTrackingId] = useState(invoice.trackingId || "")
   const [status, setStatus] = useState<Invoice["status"]>(invoice.status)
@@ -97,7 +96,6 @@ export function InvoiceEditDialog({
 
   const filteredCustomers = searchAndRank(searchableCustomers, customerSearchTerm, [
     (customer) => customer.name,
-    (customer) => customer.email,
     (customer) => customer.phone,
   ])
 
@@ -156,7 +154,6 @@ export function InvoiceEditDialog({
   const selectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer)
     setCustomerName(customer.name)
-    setCustomerEmail(customer.email)
     setCustomerPhone(customer.phone)
     setShowCustomerSearch(false)
     setCustomerSearchTerm("")
@@ -168,7 +165,6 @@ export function InvoiceEditDialog({
   const clearCustomer = () => {
     setSelectedCustomer(null)
     setCustomerName("")
-    setCustomerEmail("")
     setCustomerPhone("")
   }
 
@@ -178,10 +174,10 @@ export function InvoiceEditDialog({
   const profitPercentage = totalAmount > 0 ? (totalProfit / totalAmount) * 100 : 0
 
   const handleSave = () => {
-    if (!customerName.trim() || !customerEmail.trim() || items.length === 0) {
+    if (!customerName.trim() || items.length === 0) {
       toast({
         title: "Validation Error",
-        description: "Please fill in customer details and add at least one item.",
+        description: "Please enter the customer name and add at least one item.",
         variant: "destructive",
       })
       return
@@ -200,7 +196,7 @@ export function InvoiceEditDialog({
       ...invoice,
       trackingId: trackingId.trim() || undefined,
       customerName: customerName.trim(),
-      customerEmail: customerEmail.trim(),
+      customerEmail: "",
       customerPhone: customerPhone.trim(),
       status,
       items,
@@ -225,7 +221,6 @@ export function InvoiceEditDialog({
 
   const handleClose = () => {
     setCustomerName(invoice.customerName)
-    setCustomerEmail(invoice.customerEmail)
     setCustomerPhone(invoice.customerPhone)
     setTrackingId(invoice.trackingId || "")
     setStatus(invoice.status)
@@ -245,7 +240,6 @@ export function InvoiceEditDialog({
   useEffect(() => {
     if (isOpen) {
       setCustomerName(invoice.customerName)
-      setCustomerEmail(invoice.customerEmail)
       setCustomerPhone(invoice.customerPhone)
       setTrackingId(invoice.trackingId || "")
       setStatus(invoice.status)
@@ -255,7 +249,9 @@ export function InvoiceEditDialog({
       setInvoiceTime(getTimePart(invoice.createdAt))
 
       // Find matching customer
-      const matchingCustomer = searchableCustomers.find((c) => c.email === invoice.customerEmail)
+      const matchingCustomer = searchableCustomers.find(
+        (customer) => customer.name === invoice.customerName && customer.phone === invoice.customerPhone,
+      )
       if (matchingCustomer) {
         setSelectedCustomer(matchingCustomer)
       }
@@ -308,7 +304,7 @@ export function InvoiceEditDialog({
               {showCustomerSearch && (
                 <div className="border-2 border-orange-200 rounded-lg p-4 bg-orange-50">
                   <Input
-                    placeholder="Search customers by name or email..."
+                    placeholder="Search customers by name or phone..."
                     value={customerSearchTerm}
                     onChange={(e) => {
                       setCustomerSearchTerm(e.target.value)
@@ -343,8 +339,7 @@ export function InvoiceEditDialog({
                         onClick={() => selectCustomer(customer)}
                       >
                         <div className="font-medium text-gray-900">{customer.name}</div>
-                        <div className="text-sm text-gray-600">{customer.email}</div>
-                        <div className="text-sm text-gray-500">{customer.phone}</div>
+                        {customer.phone && <div className="text-sm text-gray-500">Phone: {customer.phone}</div>}
                       </div>
                     ))}
                     {filteredCustomers.length === 0 && customerSearchTerm && (
@@ -354,7 +349,7 @@ export function InvoiceEditDialog({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="customerName" className="text-gray-900 font-semibold">
                     Customer Name *
@@ -368,21 +363,8 @@ export function InvoiceEditDialog({
                   />
                 </div>
                 <div>
-                  <Label htmlFor="customerEmail" className="text-gray-900 font-semibold">
-                    Email *
-                  </Label>
-                  <Input
-                    id="customerEmail"
-                    type="email"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                    placeholder="Enter email address"
-                    className="bg-white border-2 border-gray-300 focus:border-orange-500"
-                  />
-                </div>
-                <div>
                   <Label htmlFor="customerPhone" className="text-gray-900 font-semibold">
-                    Phone
+                    Phone (Optional)
                   </Label>
                   <Input
                     id="customerPhone"

@@ -112,7 +112,7 @@ export function DailyOrders({
     if (searchTerm) {
       const normalizedSearchTerm = normalizeSearchText(searchTerm)
       filtered = filtered.filter((invoice) => {
-        if (searchMatchesAny([invoice.id, invoice.customerName, invoice.customerEmail], normalizedSearchTerm)) {
+        if (searchMatchesAny([invoice.id, invoice.customerName, invoice.customerPhone], normalizedSearchTerm)) {
           return true
         }
         return (invoice.items || []).some((item) =>
@@ -135,7 +135,7 @@ export function DailyOrders({
       [
         (invoice) => invoice.id,
         (invoice) => invoice.customerName,
-        (invoice) => invoice.customerEmail,
+        (invoice) => invoice.customerPhone,
         (invoice) => invoice.items?.map((item) => item.productName).join(" "),
       ],
       12,
@@ -399,7 +399,9 @@ export function DailyOrders({
                       <TableCell>
                         <div>
                           <p className="font-medium text-gray-900">{invoice.customerName}</p>
-                          <p className="text-sm text-gray-500">{invoice.customerEmail}</p>
+                          {invoice.customerPhone && (
+                            <p className="text-sm text-gray-500">{invoice.customerPhone}</p>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="font-semibold text-gray-900">

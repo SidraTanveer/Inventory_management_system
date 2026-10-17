@@ -742,7 +742,7 @@ export function DashboardOverview({
                       <TableCell>
                         <div>
                           <p className="font-medium">{invoice.customerName}</p>
-                          <p className="text-sm text-gray-500">{invoice.customerEmail}</p>
+                          {invoice.customerPhone && <p className="text-sm text-gray-500">{invoice.customerPhone}</p>}
                         </div>
                       </TableCell>
                       <TableCell className="font-semibold">

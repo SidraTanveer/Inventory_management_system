@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { Download, FileText, User, Mail, Phone, Hash, Calendar, DollarSign, Package, TrendingUp } from "lucide-react"
+import { Download, FileText, User, Phone, Hash, Calendar, DollarSign, Package, TrendingUp } from "lucide-react"
 import type { Invoice } from "@/types/app"
 
 interface InvoiceViewDialogProps {
@@ -99,20 +99,13 @@ export function InvoiceViewDialog({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center text-gray-600 mb-1">
                     <User className="h-4 w-4 mr-1" />
                     <span className="text-sm font-medium">Name</span>
                   </div>
                   <div className="font-medium text-gray-900">{invoice.customerName}</div>
-                </div>
-                <div>
-                  <div className="flex items-center text-gray-600 mb-1">
-                    <Mail className="h-4 w-4 mr-1" />
-                    <span className="text-sm font-medium">Email</span>
-                  </div>
-                  <div className="font-medium text-gray-900">{invoice.customerEmail}</div>
                 </div>
                 <div>
                   <div className="flex items-center text-gray-600 mb-1">
