@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import { PAYMENT_DETAILS } from "@/lib/payment-details"
 import { Download, FileText, User, Phone, Hash, Calendar, DollarSign, Package, TrendingUp } from "lucide-react"
 import type { Invoice } from "@/types/app"
 
@@ -223,6 +224,14 @@ export function InvoiceViewDialog({
                   <div className="text-2xl font-bold text-gray-900">
                     {formatCurrency(invoice.totalAmount + (invoice.deliveryCharges || 0), currentAppCurrency)}
                   </div>
+                </div>
+
+                <div className="rounded-lg border-2 border-purple-300 bg-purple-50 p-4">
+                  <h3 className="text-base font-bold text-purple-900">{PAYMENT_DETAILS.bankName} Payment Details</h3>
+                  <p className="mt-1 text-sm font-medium text-purple-800">{PAYMENT_DETAILS.accountName}</p>
+                  <p className="mt-1 text-lg font-bold tracking-wide text-purple-950">
+                    {PAYMENT_DETAILS.accountNumber}
+                  </p>
                 </div>
               </div>
             </CardContent>

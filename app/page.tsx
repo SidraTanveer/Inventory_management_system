@@ -66,6 +66,7 @@ import {
   getDaysSince,
 } from "@/lib/utils"
 import { savePDFToDatabase } from "@/lib/pdf-utils"
+import { PAYMENT_DETAILS } from "@/lib/payment-details"
 const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36)
 
 async function requestApi<T>(url: string, init?: RequestInit): Promise<T> {
@@ -1246,6 +1247,29 @@ function DashboardPageContent() {
         170,
         yPosition,
       )
+      yPosition += 8
+
+      const paymentDetailsHeight = 26
+      const paymentDetailsFooterGap = 55
+      if (yPosition + paymentDetailsHeight > doc.internal.pageSize.height - paymentDetailsFooterGap) {
+        doc.addPage()
+        yPosition = 35
+      }
+
+      doc.setFillColor(243, 232, 255)
+      doc.setDrawColor(147, 51, 234)
+      doc.setLineWidth(0.8)
+      doc.roundedRect(100, yPosition, 90, paymentDetailsHeight, 2, 2, "FD")
+      doc.setFont("Times", "Bold")
+      doc.setFontSize(13)
+      doc.setTextColor(88, 28, 135)
+      doc.text("Payment Details:", 105, yPosition + 7)
+      doc.setFont("Times", "Roman")
+      doc.setFontSize(11)
+      doc.text(`${PAYMENT_DETAILS.bankName} ${PAYMENT_DETAILS.accountName}`, 105, yPosition + 14)
+      doc.setFont("Times", "Bold")
+      doc.setFontSize(12)
+      doc.text(PAYMENT_DETAILS.accountNumber, 105, yPosition + 21)
 
       const contactSectionY = doc.internal.pageSize.height - 50
       doc.setFont("Times", "Roman")
